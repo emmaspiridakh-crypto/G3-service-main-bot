@@ -1,0 +1,1403 @@
+from __future__ import annotations
+
+import asyncio
+import io
+import re
+import logging
+import datetime as dt
+
+import discord
+from discord import app_commands
+from discord.ext import commands
+
+import config
+from emojis import EMOJI
+from utils.storage import store, TRANSCRIPTS_DIR
+from utils.transcripts import build_transcript
+
+log = logging.getLogger(__name__)
+
+# Ticket "kinds" that belong to the support-panel system (Owner / General
+# Support / Technical / Billing) use their own staff roles + category,
+# configured separately from the shop's Purchase/Order tickets.
+SUPPORT_KINDS = {"owner", "manager", "general", "technical", "billing", "replacement"}
+
+MAX_CHANNEL_OVERWRITES = 100
+
+# --------------------------------------------------------------------------
+# Helpers
+# --------------------------------------------------------------------------
+
+def staff_role_ids_for_kind(kind: str | None) -> list[int]:
+    if kind in SUPPORT_KINDS:
+        return list(config.TICKET_KIND_STAFF_ROLES.get(kind, []))
+    return config.staff_role_ids()
+
+
+def is_staff(member: discord.Member, kind: str | None = None) -> bool:
+    staff_ids = set(staff_role_ids_for_kind(kind))
+    return any(role.id in staff_ids for role in member.roles)
+
+
+def is_ceo(member: discord.Member) -> bool:
+    return any(role.id == config.ROLE_CEO for role in member.roles)
+
+
+def close_denied_reason(member: discord.Member, ticket: dict) -> str | None:
+    """None if `member` may close the ticket, otherwise the message to show.
+    Only the staff member who claimed the ticket, or the CEO, may close it."""
+    if is_ceo(member):
+        return None
+    if not is_staff(member, ticket["kind"]):
+        return "Only staff can close this ticket."
+    claimed_by = ticket.get("claimed_by")
+    if not claimed_by:
+        return "This ticket has not been claimed yet. Claim it first, or ask the CEO to close it."
+    if member.id != claimed_by:
+        return f"Only <@{claimed_by}> or the CEO can close it."
+    return None
+
+
+def notice_view(text: str, colour: discord.Colour) -> discord.ui.LayoutView:
+    """Small Components V2 panel with a single line of text."""
+    view = discord.ui.LayoutView(timeout=None)
+    view.add_item(discord.ui.Container(discord.ui.TextDisplay(text), accent_colour=colour))
+    return view
+
+
+def build_ticket_opened_view(channel: discord.TextChannel, kind: str) -> discord.ui.LayoutView:
+    """Ephemeral "Your ticket has opened" panel (only the opener sees it)
+    with a button that jumps straight to the ticket."""
+    small = discord.SeparatorSpacing.small
+    view = discord.ui.LayoutView(timeout=None)
+    view.add_item(
+        discord.ui.Container(
+            discord.ui.Separator(visible=True, spacing=small),
+            discord.ui.TextDisplay("# <:name:1545553071872933898> 〃__***Your Ticket Has Opened.***__ "),
+            discord.ui.Separator(visible=True, spacing=small),
+            discord.ui.TextDisplay(" You can go to your ticket by clicking the button below "),
+            discord.ui.Separator(visible=True, spacing=small),
+            discord.ui.ActionRow(
+                discord.ui.Button(
+                    style=discord.ButtonStyle.link,
+                    label="〃 My ticket 〃",
+                    emoji=discord.PartialEmoji(name="name", id=1545553071872933898),
+                    url=channel.jump_url,
+                ),
+            ),
+            discord.ui.Separator(visible=True, spacing=small),
+            discord.ui.TextDisplay(
+                "> -  <:name:1566128213858459848> Please be respectful and don't spam in your ticket. We will be with you shortly."
+            ),
+            discord.ui.Separator(visible=True, spacing=small),
+            discord.ui.TextDisplay(
+                "> <:name:1545831836339409048> 〃 **G3 Service™, All Rights Reserved ©** <:name:1545576267904974859> **Ticket  Center** "
+            ),
+            discord.ui.Separator(visible=True, spacing=small),
+            accent_colour=0x006FFF,
+        ),
+    )
+    return view
+
+
+def writer_overwrite() -> discord.PermissionOverwrite:
+    return discord.PermissionOverwrite(
+        view_channel=True, read_message_history=True, send_messages=True
+    )
+
+
+async def lock_ticket_to_claimer(
+    channel: discord.TextChannel, claimer: discord.Member, kind: str
+) -> None:
+    """After a claim: every staff role can still SEE the ticket but can no
+    longer write in it. The claimer (member overwrite beats role overwrites)
+    and the CEO role keep write access. The customer is untouched."""
+    guild = channel.guild
+    read_only = discord.PermissionOverwrite(
+        view_channel=True,
+        read_message_history=True,
+        send_messages=False,
+        send_messages_in_threads=False,
+        create_public_threads=False,
+        create_private_threads=False,
+    )
+    for role_id in staff_role_ids_for_kind(kind):
+        if role_id == config.ROLE_CEO:
+            continue
+        role = guild.get_role(role_id)
+        if role is not None:
+            await channel.set_permissions(role, overwrite=read_only, reason="Ticket claimed")
+
+    ceo_role = guild.get_role(config.ROLE_CEO)
+    if ceo_role is not None:
+        await channel.set_permissions(ceo_role, overwrite=writer_overwrite(), reason="Ticket claimed")
+    await channel.set_permissions(claimer, overwrite=writer_overwrite(), reason="Ticket claimed")
+
+
+def added_members(channel: discord.TextChannel, ticket: dict) -> list[discord.Member]:
+    """Members that were let in through the Modify button: they have an
+    explicit write overwrite and are not the customer / claimer / bot."""
+    skip = {ticket["customer_id"], ticket.get("claimed_by"), channel.guild.me.id}
+    return [
+        target
+        for target, overwrite in channel.overwrites.items()
+        if isinstance(target, discord.Member)
+        and target.id not in skip
+        and overwrite.send_messages is True
+    ]
+
+
+def safe_name(name: str) -> str:
+    """Turns a display name into something usable in a channel name.
+    Keeps letters from any script (Greek included), not just a-z."""
+    cleaned = re.sub(r"[\s_]+", "-", name.strip().lower())
+    cleaned = re.sub(r"[^\w\-]", "", cleaned, flags=re.UNICODE)
+    cleaned = re.sub(r"-{2,}", "-", cleaned).strip("-")
+    return cleaned or "customer"
+
+
+async def get_log_channel(guild: discord.Guild, kind: str | None = None) -> discord.TextChannel | None:
+    channel_id = config.SUPPORT_LOG_CHANNEL if kind in SUPPORT_KINDS else config.CHANNEL_LOG
+    channel = guild.get_channel(channel_id)
+    return channel if isinstance(channel, discord.TextChannel) else None
+
+
+def ticket_overwrites(
+    guild: discord.Guild, customer: discord.Member, kind: str | None = None
+) -> dict[discord.abc.Snowflake, discord.PermissionOverwrite]:
+    staff_ids = set(staff_role_ids_for_kind(kind))
+
+    # Discord allows at most 100 permission overwrites per channel. Denying
+    # *every* role in a big server blows past that limit and channel creation
+    # fails with a 400 error. @everyone is always denied; on top of that we
+    # only deny the roles that can actually see channels by default
+    # (View Channel in their base permissions), and stop before the limit.
+    overwrites: dict[discord.abc.Snowflake, discord.PermissionOverwrite] = {
+        guild.default_role: discord.PermissionOverwrite(view_channel=False),
+    }
+
+    reserved = 2 + len(staff_ids)  # customer + bot + staff roles
+    max_role_denies = MAX_CHANNEL_OVERWRITES - reserved - 1
+    for role in guild.roles:
+        if len(overwrites) - 1 >= max_role_denies:
+            break
+        if role.id == guild.id or role.id in staff_ids:
+            continue
+        if not role.permissions.view_channel:
+            continue
+        overwrites[role] = discord.PermissionOverwrite(view_channel=False)
+
+    overwrites[customer] = discord.PermissionOverwrite(
+        view_channel=True, send_messages=True, read_message_history=True
+    )
+    overwrites[guild.me] = discord.PermissionOverwrite(
+        view_channel=True, send_messages=True, manage_channels=True
+    )
+
+    for role_id in staff_ids:
+        role = guild.get_role(role_id)
+        if role is not None:
+            overwrites[role] = discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, read_message_history=True
+            )
+    return overwrites
+
+
+def audit_ticket_visibility(
+    channel: discord.TextChannel,
+    customer: discord.Member,
+    kind: str | None,
+) -> list[str]:
+    """Returns who can see the freshly created ticket channel even though
+    they should not (not the customer, not the bot, not a configured staff
+    role). Used only for logging — it tells you exactly who is leaking and
+    why instead of guessing."""
+    guild = channel.guild
+    staff_ids = set(staff_role_ids_for_kind(kind))
+    leaks: list[str] = []
+    for member in guild.members:
+        if member.id in (customer.id, guild.me.id):
+            continue
+        if any(role.id in staff_ids for role in member.roles):
+            continue
+        perms = channel.permissions_for(member)
+        if not perms.view_channel:
+            continue
+        if member.id == guild.owner_id:
+            why = "server owner"
+        elif perms.administrator:
+            admin_roles = [r.name for r in member.roles if r.permissions.administrator]
+            why = "Administrator via role: " + ", ".join(admin_roles or ["?"])
+        else:
+            why = "roles: " + ", ".join(r.name for r in member.roles if r.id != guild.id)
+        leaks.append(f"{member} ({member.id}) — {why}")
+    return leaks
+
+
+# --------------------------------------------------------------------------
+# Dynamic buttons (survive bot restarts — state is read from the JSON store
+# using the channel id encoded in the custom_id)
+# --------------------------------------------------------------------------
+
+class ClaimButton(
+    discord.ui.DynamicItem[discord.ui.Button],
+    template=r"ticket:claim:(?P<channel_id>[0-9]+)",
+):
+    def __init__(self, channel_id: int, claimed_by: int | None = None):
+        self.channel_id = channel_id
+        label = "Claim"
+        style = discord.ButtonStyle.primary
+        if claimed_by:
+            label = "Claimed"
+            style = discord.ButtonStyle.secondary
+        super().__init__(
+            discord.ui.Button(
+                label=label,
+                style=style,
+                emoji=EMOJI["claim"],
+                custom_id=f"ticket:claim:{channel_id}",
+                disabled=bool(claimed_by),
+            )
+        )
+
+    @classmethod
+    async def from_custom_id(cls, interaction, item, match: re.Match[str]):
+        return cls(int(match["channel_id"]))
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        ticket = await store.get(self.channel_id)
+        if ticket is None:
+            return await interaction.response.send_message(
+                "This ticket no longer exists.", ephemeral=True
+            )
+        if not isinstance(interaction.user, discord.Member) or not is_staff(interaction.user, ticket["kind"]):
+            return await interaction.response.send_message(
+                "Only staff can claim tickets.", ephemeral=True
+            )
+        if ticket.get("claimed_by"):
+            return await interaction.response.send_message(
+                "This ticket is already claimed.", ephemeral=True
+            )
+
+        # Permission edits are several API calls — defer so the interaction
+        # doesn't time out, then claim atomically (two staff pressing Claim
+        # at the same moment can't both win).
+        await interaction.response.defer()
+        if not await store.claim(self.channel_id, interaction.user.id):
+            return await interaction.followup.send(
+                "This ticket is already claimed.", ephemeral=True
+            )
+
+        lock_failed = False
+        try:
+            await lock_ticket_to_claimer(interaction.channel, interaction.user, ticket["kind"])
+        except discord.HTTPException:
+            log.exception("Could not lock ticket %s after claim", self.channel_id)
+            lock_failed = True
+
+        await interaction.followup.send(
+            f"{EMOJI['claim']} Ticket claimed by {interaction.user.mention}.\n"
+        )
+        if lock_failed:
+            await interaction.followup.send(
+                "Claimed, but I couldn't lock the channel — I'm missing Manage Channel / "
+                "Manage Permissions here.",
+                ephemeral=True,
+            )
+        await refresh_ticket_panel(interaction.channel, interaction.client)
+
+
+class PingButton(
+    discord.ui.DynamicItem[discord.ui.Button],
+    template=r"ticket:ping:(?P<channel_id>[0-9]+)",
+):
+    def __init__(self, channel_id: int):
+        self.channel_id = channel_id
+        super().__init__(
+            discord.ui.Button(
+                label="Ping User",
+                style=discord.ButtonStyle.secondary,
+                emoji=EMOJI["ping"],
+                custom_id=f"ticket:ping:{channel_id}",
+            )
+        )
+
+    @classmethod
+    async def from_custom_id(cls, interaction, item, match: re.Match[str]):
+        return cls(int(match["channel_id"]))
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        ticket = await store.get(self.channel_id)
+        if ticket is None:
+            return await interaction.response.send_message(
+                "This ticket no longer exists.", ephemeral=True
+            )
+
+        claimed_by = ticket.get("claimed_by")
+        if not claimed_by or interaction.user.id != claimed_by:
+            return await interaction.response.send_message(
+                "Only the staff member who claimed this ticket can ping the user.",
+                ephemeral=True,
+            )
+
+        guild = interaction.guild
+        customer = guild.get_member(ticket["customer_id"]) if guild else None
+        if customer is None:
+            return await interaction.response.send_message(
+                "Could not find the customer in this server.", ephemeral=True
+            )
+
+        try:
+            await customer.send(
+                f"{EMOJI['ping']} You have a notification in your ticket: <#{self.channel_id}>"
+            )
+            await interaction.response.send_message(
+                f"{EMOJI['ping']} Pinged {customer.mention} in DM.", ephemeral=True
+            )
+        except discord.Forbidden:
+            await interaction.response.send_message(
+                "Could not DM this user their DMs may be closed.", ephemeral=True
+            )
+
+
+class CloseButton(
+    discord.ui.DynamicItem[discord.ui.Button],
+    template=r"ticket:close:(?P<channel_id>[0-9]+)",
+):
+    def __init__(self, channel_id: int):
+        self.channel_id = channel_id
+        super().__init__(
+            discord.ui.Button(
+                label="Close",
+                style=discord.ButtonStyle.danger,
+                emoji=EMOJI["close"],
+                custom_id=f"ticket:close:{channel_id}",
+            )
+        )
+
+    @classmethod
+    async def from_custom_id(cls, interaction, item, match: re.Match[str]):
+        return cls(int(match["channel_id"]))
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        ticket = await store.get(self.channel_id)
+        if ticket is None:
+            return await interaction.response.send_message(
+                "This ticket no longer exists.", ephemeral=True
+            )
+        if not isinstance(interaction.user, discord.Member):
+            return await interaction.response.send_message(
+                "Only staff can close this ticket.", ephemeral=True
+            )
+        denied = close_denied_reason(interaction.user, ticket)
+        if denied:
+            return await interaction.response.send_message(denied, ephemeral=True)
+
+        await interaction.response.send_modal(CloseReasonModal(self.channel_id))
+
+
+class TranscriptButton(
+    discord.ui.DynamicItem[discord.ui.Button],
+    template=r"ticket:transcript:(?P<channel_id>[0-9]+)",
+):
+    def __init__(self, channel_id: int):
+        self.channel_id = channel_id
+        super().__init__(
+            discord.ui.Button(
+                label="View Transcript",
+                style=discord.ButtonStyle.secondary,
+                emoji=EMOJI["transcript"],
+                custom_id=f"ticket:transcript:{channel_id}",
+            )
+        )
+
+    @classmethod
+    async def from_custom_id(cls, interaction, item, match: re.Match[str]):
+        return cls(int(match["channel_id"]))
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        all_staff_ids = {r for ids in config.TICKET_KIND_STAFF_ROLES.values() for r in ids}
+        all_staff_ids.update(config.staff_role_ids())
+        if not isinstance(interaction.user, discord.Member) or not any(
+            role.id in all_staff_ids for role in interaction.user.roles
+        ):
+            return await interaction.response.send_message(
+                "Only staff can view transcripts.", ephemeral=True
+            )
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        file = await transcript_file_for(interaction, self.channel_id)
+        if file is None:
+            return await interaction.followup.send("Transcript file not found.", ephemeral=True)
+        await interaction.followup.send(file=file, ephemeral=True)
+
+
+async def transcript_file_for(
+    interaction: discord.Interaction, channel_id: int
+) -> discord.File | None:
+    """The transcript is read from the file attached to the message the
+    button sits on (it survives redeploys, unlike the local data/ folder),
+    with the local copy as a fallback."""
+    message = interaction.message
+    if message is not None and message.attachments:
+        attachment = message.attachments[0]
+        try:
+            data = await attachment.read()
+            return discord.File(io.BytesIO(data), filename=attachment.filename)
+        except discord.HTTPException:
+            log.exception("Could not read transcript attachment for %s", channel_id)
+    path = TRANSCRIPTS_DIR / f"{channel_id}.txt"
+    if path.exists():
+        return discord.File(path)
+    return None
+
+
+class DMTranscriptButton(
+    discord.ui.DynamicItem[discord.ui.Button],
+    template=r"ticket:dmtranscript:(?P<channel_id>[0-9]+)",
+):
+    """Button in the 'ticket closed' DM sent to the customer (no emoji)."""
+
+    def __init__(self, channel_id: int):
+        self.channel_id = channel_id
+        super().__init__(
+            discord.ui.Button(
+                label="Transcript",
+                style=discord.ButtonStyle.secondary,
+                custom_id=f"ticket:dmtranscript:{channel_id}",
+            )
+        )
+
+    @classmethod
+    async def from_custom_id(cls, interaction, item, match: re.Match[str]):
+        return cls(int(match["channel_id"]))
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer(thinking=True)
+        file = await transcript_file_for(interaction, self.channel_id)
+        if file is None:
+            return await interaction.followup.send("Transcript file not found.")
+        await interaction.followup.send(file=file)
+
+
+class ModifyButton(
+    discord.ui.DynamicItem[discord.ui.Button],
+    template=r"ticket:modify:(?P<channel_id>[0-9]+)",
+):
+    def __init__(self, channel_id: int):
+        self.channel_id = channel_id
+        super().__init__(
+            discord.ui.Button(
+                label="Modify",
+                style=discord.ButtonStyle.secondary,
+                emoji=EMOJI["modify"],
+                custom_id=f"ticket:modify:{channel_id}",
+            )
+        )
+
+    @classmethod
+    async def from_custom_id(cls, interaction, item, match: re.Match[str]):
+        return cls(int(match["channel_id"]))
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if await authorize_modify(interaction, self.channel_id) is None:
+            return
+        await interaction.response.send_message(view=ModifyView(self.channel_id), ephemeral=True)
+
+
+# --------------------------------------------------------------------------
+# Modify: Add / Remove who can write in a claimed ticket
+# --------------------------------------------------------------------------
+
+async def authorize_modify(interaction: discord.Interaction, channel_id: int) -> dict | None:
+    """Only the claimer or the CEO may change who can write. Sends the error
+    itself and returns None when not allowed."""
+    ticket = await store.get(channel_id)
+    if ticket is None:
+        await interaction.response.send_message("This ticket no longer exists.", ephemeral=True)
+        return None
+    user = interaction.user
+    if not isinstance(user, discord.Member) or not (
+        is_ceo(user) or user.id == ticket.get("claimed_by")
+    ):
+        await interaction.response.send_message(
+            "Only the staff member who claimed this ticket or the CEO can use Modify.",
+            ephemeral=True,
+        )
+        return None
+    if not ticket.get("claimed_by"):
+        await interaction.response.send_message(
+            "Claim this ticket first. Modify only matters once it is claimed.", ephemeral=True
+        )
+        return None
+    return ticket
+
+
+class ModifyView(discord.ui.LayoutView):
+    def __init__(self, channel_id: int) -> None:
+        super().__init__(timeout=180)
+        self.channel_id = channel_id
+
+        add_btn = discord.ui.Button(label="Add", style=discord.ButtonStyle.success)
+        add_btn.callback = self.on_add
+        remove_btn = discord.ui.Button(label="Remove", style=discord.ButtonStyle.danger)
+        remove_btn.callback = self.on_remove
+
+        self.add_item(
+            discord.ui.Container(
+                discord.ui.TextDisplay(
+                    f"{EMOJI['modify']} **Modify ticket access**\n"
+                    "Add someone so they can write in this ticket, or remove "
+                    "someone you added before."
+                ),
+                discord.ui.ActionRow(add_btn, remove_btn),
+                accent_colour=discord.Colour.blue(),
+            )
+        )
+
+    async def on_add(self, interaction: discord.Interaction) -> None:
+        if await authorize_modify(interaction, self.channel_id) is None:
+            return
+        await interaction.response.edit_message(view=AddMemberView(self.channel_id))
+
+    async def on_remove(self, interaction: discord.Interaction) -> None:
+        ticket = await authorize_modify(interaction, self.channel_id)
+        if ticket is None:
+            return
+        channel = interaction.guild.get_channel(self.channel_id) if interaction.guild else None
+        if not isinstance(channel, discord.TextChannel):
+            return await interaction.response.send_message(
+                "This ticket no longer exists.", ephemeral=True
+            )
+        await interaction.response.edit_message(
+            view=RemoveMemberView(self.channel_id, added_members(channel, ticket))
+        )
+
+
+class AddMemberView(discord.ui.LayoutView):
+    def __init__(self, channel_id: int) -> None:
+        super().__init__(timeout=180)
+        self.channel_id = channel_id
+
+        picker = discord.ui.UserSelect(placeholder="Pick a member to add...", min_values=1, max_values=1)
+        picker.callback = self.on_pick
+        back_btn = discord.ui.Button(label="Back", style=discord.ButtonStyle.secondary)
+        back_btn.callback = self.on_back
+
+        self.add_item(
+            discord.ui.Container(
+                discord.ui.TextDisplay(
+                    f"{EMOJI['modify']} **Add a member**\n"
+                    "Pick who should be able to write in this ticket."
+                ),
+                discord.ui.ActionRow(picker),
+                discord.ui.ActionRow(back_btn),
+                accent_colour=discord.Colour.green(),
+            )
+        )
+
+    async def on_back(self, interaction: discord.Interaction) -> None:
+        await interaction.response.edit_message(view=ModifyView(self.channel_id))
+
+    async def on_pick(self, interaction: discord.Interaction) -> None:
+        ticket = await authorize_modify(interaction, self.channel_id)
+        if ticket is None:
+            return
+        guild = interaction.guild
+        channel = guild.get_channel(self.channel_id) if guild else None
+        if not isinstance(channel, discord.TextChannel):
+            return await interaction.response.send_message(
+                "This ticket no longer exists.", ephemeral=True
+            )
+
+        await interaction.response.defer()
+        member_id = int(interaction.data["values"][0])
+        member = guild.get_member(member_id)
+        if member is None:
+            try:
+                member = await guild.fetch_member(member_id)
+            except discord.HTTPException:
+                member = None
+
+        problem = None
+        if member is None:
+            problem = "That person is not in this server."
+        elif member.bot:
+            problem = "You can't add a bot."
+        elif member.id == ticket["customer_id"]:
+            problem = "That is the customer — they can already write here."
+        elif member.id == ticket.get("claimed_by") or is_ceo(member):
+            problem = f"{member.mention} can already write here."
+        elif member in added_members(channel, ticket):
+            problem = f"{member.mention} was already added."
+        if problem:
+            return await interaction.edit_original_response(
+                view=notice_view(problem, discord.Colour.red())
+            )
+
+        try:
+            await channel.set_permissions(
+                member, overwrite=writer_overwrite(), reason=f"Added by {interaction.user}"
+            )
+        except discord.HTTPException:
+            log.exception("Could not add %s to ticket %s", member.id, self.channel_id)
+            return await interaction.edit_original_response(
+                view=notice_view(
+                    "I couldn't change the channel permissions (missing Manage Permissions).",
+                    discord.Colour.red(),
+                )
+            )
+
+        await interaction.edit_original_response(
+            view=notice_view(f"{EMOJI['modify']} Added {member.mention}.", discord.Colour.green())
+        )
+        await channel.send(
+            view=notice_view(
+                f"{EMOJI['modify']} {interaction.user.mention} added {member.mention} to this ticket.",
+                discord.Colour.green(),
+            )
+        )
+
+
+class RemoveMemberView(discord.ui.LayoutView):
+    def __init__(self, channel_id: int, members: list[discord.Member]) -> None:
+        super().__init__(timeout=180)
+        self.channel_id = channel_id
+
+        back_btn = discord.ui.Button(label="Back", style=discord.ButtonStyle.secondary)
+        back_btn.callback = self.on_back
+
+        children: list[discord.ui.Item] = []
+        if members:
+            options = [
+                discord.SelectOption(
+                    label=m.display_name[:100], value=str(m.id), description=str(m)[:100]
+                )
+                for m in members[:25]
+            ]
+            picker = discord.ui.Select(placeholder="Pick a member to remove...", options=options)
+            picker.callback = self.on_pick
+            children.append(
+                discord.ui.TextDisplay(
+                    f"{EMOJI['modify']} **Remove a member**\n"
+                    "Pick who should no longer be able to write in this ticket."
+                )
+            )
+            children.append(discord.ui.ActionRow(picker))
+        else:
+            children.append(
+                discord.ui.TextDisplay(
+                    f"{EMOJI['modify']} **Remove a member**\n"
+                    "Nobody has been added to this ticket yet."
+                )
+            )
+        children.append(discord.ui.ActionRow(back_btn))
+        self.add_item(discord.ui.Container(*children, accent_colour=discord.Colour.red()))
+
+    async def on_back(self, interaction: discord.Interaction) -> None:
+        await interaction.response.edit_message(view=ModifyView(self.channel_id))
+
+    async def on_pick(self, interaction: discord.Interaction) -> None:
+        ticket = await authorize_modify(interaction, self.channel_id)
+        if ticket is None:
+            return
+        guild = interaction.guild
+        channel = guild.get_channel(self.channel_id) if guild else None
+        if not isinstance(channel, discord.TextChannel):
+            return await interaction.response.send_message(
+                "This ticket no longer exists.", ephemeral=True
+            )
+
+        await interaction.response.defer()
+        member_id = int(interaction.data["values"][0])
+        target = guild.get_member(member_id) or discord.Object(id=member_id)
+        try:
+            # overwrite=None deletes the member's overwrite: staff fall back
+            # to their (read-only) role, everyone else loses access.
+            await channel.set_permissions(
+                target, overwrite=None, reason=f"Removed by {interaction.user}"
+            )
+        except discord.HTTPException:
+            log.exception("Could not remove %s from ticket %s", member_id, self.channel_id)
+            return await interaction.edit_original_response(
+                view=notice_view(
+                    "I couldn't change the channel permissions (missing Manage Permissions).",
+                    discord.Colour.red(),
+                )
+            )
+
+        await interaction.edit_original_response(
+            view=notice_view(f"{EMOJI['modify']} Removed <@{member_id}>.", discord.Colour.red())
+        )
+        await channel.send(
+            view=notice_view(
+                f"{EMOJI['modify']} {interaction.user.mention} removed <@{member_id}> from this ticket.",
+                discord.Colour.red(),
+            ),
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
+
+def format_ticket_details(kind: str, fields: dict[str, str] | None) -> str:
+    if not fields:
+        return "Please describe what you need below — a member of staff will be with you shortly."
+
+    if kind == "purchase":
+        return (
+            f"{EMOJI['bot']} **Type of bot:** {fields.get('bot_type', '-')}\n"
+            f"{EMOJI['plan']} **Plan:** {fields.get('plan', '-')}\n"
+            f"{EMOJI['payment']} **Payment Method:** {fields.get('payment_method', '-')}"
+        )
+
+    if kind == "order":
+        return (
+            f"{EMOJI['server']} **Server:** {fields.get('server', '-')}\n"
+            f"{EMOJI['budget']} **Budget:** {fields.get('budget', '-')}\n"
+            f"{EMOJI['payment']} **Payment Method:** {fields.get('payment_method', '-')}\n\n"
+            f"**Description:**\n{fields.get('description', '-')}"
+        )
+
+    if fields.get("description"):
+        return f"**Description:**\n{fields['description']}"
+
+    return "Please describe what you need below — a member of staff will be with you shortly."
+
+
+ARROW = "<:arrow4:1566128213858459848>"
+BULLET = "<:name:1566128213858459848>"
+
+# "Type" shown in the new panel for the support-style tickets.
+TICKET_TYPE_LABELS = {
+    "owner": "Contact Owner",
+    "manager": "Management Team",
+    "general": "General Support",
+    "technical": "Technical Issue",
+    "billing": "Payment Issue",
+    "replacement": "Replacement",
+}
+
+
+def _ticket_banner_url() -> str | None:
+    return getattr(config, "TICKET_PANEL_BANNER_URL", None) or getattr(config, "PURCHASE_TICKET_BANNER_URL", None)
+
+
+def _build_new_ticket_panel(
+    channel_id: int,
+    customer: discord.Member,
+    claimed_by: int | None,
+    info_lines: list[str],
+) -> discord.ui.LayoutView:
+    """Shared layout of the new ticket panel. Same buttons/handlers as every
+    other ticket — only label/emoji/style are restyled. "Claimed By" is added
+    only once a staff member has claimed the ticket."""
+    small = discord.SeparatorSpacing.small
+
+    def sep() -> discord.ui.Separator:
+        return discord.ui.Separator(visible=True, spacing=small)
+
+    info_lines = list(info_lines)
+    if claimed_by:
+        info_lines.append(f"> {ARROW} **Claimed By:** <@{claimed_by}>")
+
+    claim = ClaimButton(channel_id, claimed_by)
+    claim.item.label = "〃 Claimed" if claimed_by else "〃 Claim"
+    claim.item.style = discord.ButtonStyle.secondary
+    claim.item.emoji = discord.PartialEmoji(name="name", id=1566450319351611504)
+
+    modify = ModifyButton(channel_id)
+    modify.item.label = "〃 Modify "
+    modify.item.emoji = discord.PartialEmoji(name="name", id=1545577232922312734)
+
+    ping = PingButton(channel_id)
+    ping.item.label = "〃 Ping User"
+    ping.item.emoji = discord.PartialEmoji(name="name", id=1566453919842836520)
+
+    close = CloseButton(channel_id)
+    close.item.label = "〃 Close "
+    close.item.style = discord.ButtonStyle.secondary
+    close.item.emoji = discord.PartialEmoji(name="name", id=1566453862343385289)
+
+    children: list = [sep()]
+    banner = _ticket_banner_url()
+    if banner:
+        children += [discord.ui.MediaGallery(discord.MediaGalleryItem(banner)), sep()]
+    children += [
+        discord.ui.TextDisplay(f"# <:name:1566455107329982464> 〃 __Welcome - {customer.mention}__ "),
+        sep(),
+        discord.ui.TextDisplay(
+            "<:Dot:1545576267904974859> Describe to us how we can help you and we will be with you shortly. "
+        ),
+        sep(),
+        discord.ui.TextDisplay("## <:name:1545553071872933898> 〃 **__Ticket Info__**"),
+        sep(),
+        discord.ui.TextDisplay("\n".join(info_lines)),
+        sep(),
+        discord.ui.ActionRow(claim, modify, ping, close),
+        sep(),
+        discord.ui.TextDisplay(
+            "<:name:1545831836339409048> 〃 **G3 Service™, All Rights Reserved ©** "
+            "<:name:1545576267904974859> **Ticket  Center** "
+        ),
+        sep(),
+    ]
+    view = discord.ui.LayoutView(timeout=None)
+    view.add_item(discord.ui.Container(*children, accent_colour=0x0068FA))
+    return view
+
+
+def build_purchase_ticket_view(
+    channel_id: int,
+    customer: discord.Member,
+    fields: dict[str, str] | None,
+    claimed_by: int | None,
+) -> discord.ui.LayoutView:
+    """Purchase tickets: Product / Status (plan) / Payment Method."""
+    fields = fields or {}
+    return _build_new_ticket_panel(
+        channel_id, customer, claimed_by,
+        [
+            f"> {ARROW} **Opened By:** {customer.mention}",
+            f"> {ARROW} **Type:** Purchase",
+            f"> {BULLET} **Product:** {fields.get('bot_type') or '-'}",
+            f"> {BULLET} **Status:** {fields.get('plan') or '-'}",
+            f"> {BULLET} **Payment Method:** {fields.get('payment_method') or '-'}",
+        ],
+    )
+
+
+def build_order_ticket_view(
+    channel_id: int,
+    customer: discord.Member,
+    fields: dict[str, str] | None,
+    claimed_by: int | None,
+) -> discord.ui.LayoutView:
+    """Order tickets: Budget / Server / Payment Method / Description."""
+    fields = fields or {}
+    description = (fields.get("description") or "-").strip() or "-"
+    description = description.replace("\n", "\n> ")
+    return _build_new_ticket_panel(
+        channel_id, customer, claimed_by,
+        [
+            f"> {ARROW} **Opened By:** {customer.mention}",
+            f"> {ARROW} **Type:** Order",
+            f"> {ARROW} **Budget:** {fields.get('budget') or '-'}",
+            f"> {ARROW} **Server:** {fields.get('server') or '-'}",
+            f"> {ARROW} **Payment Method:** {fields.get('payment_method') or '-'}",
+            f"> {ARROW} **Description:** {description}",
+        ],
+    )
+
+
+def build_support_ticket_view(
+    channel_id: int,
+    kind: str,
+    customer: discord.Member,
+    fields: dict[str, str] | None,
+    claimed_by: int | None,
+) -> discord.ui.LayoutView:
+    """Owner / Management / General / Technical / Payment / Replacement:
+    Opened By / Type / Description (what the customer wrote in the modal)."""
+    fields = fields or {}
+    description = (fields.get("description") or "-").strip() or "-"
+    description = description.replace("\n", "\n> ")
+    return _build_new_ticket_panel(
+        channel_id, customer, claimed_by,
+        [
+            f"> {ARROW} **Opened By:** {customer.mention}",
+            f"> {ARROW} **Type:** {TICKET_TYPE_LABELS.get(kind, kind.title())}",
+            f"> {ARROW} **Description:** {description}",
+        ],
+    )
+
+
+def build_ticket_control_view(
+    channel_id: int,
+    kind: str,
+    customer: discord.Member,
+    fields: dict[str, str] | None,
+    claimed_by: int | None,
+) -> discord.ui.LayoutView:
+    if kind == "purchase":
+        return build_purchase_ticket_view(channel_id, customer, fields, claimed_by)
+    if kind == "order":
+        return build_order_ticket_view(channel_id, customer, fields, claimed_by)
+    return build_support_ticket_view(channel_id, kind, customer, fields, claimed_by)
+
+
+async def refresh_ticket_panel(channel: discord.abc.Messageable, bot: discord.Client) -> None:
+    ticket = await store.get(channel.id)
+    if not ticket:
+        return
+    guild = channel.guild
+    customer = guild.get_member(ticket["customer_id"])
+    if customer is None:
+        return
+
+    panel_message_id = ticket.get("panel_message_id")
+    if panel_message_id is None:
+        return
+
+    try:
+        message = await channel.fetch_message(panel_message_id)
+    except discord.NotFound:
+        return
+
+    view = build_ticket_control_view(
+        channel.id, ticket["kind"], customer, ticket.get("fields"), ticket.get("claimed_by")
+    )
+    await message.edit(view=view)
+
+
+# --------------------------------------------------------------------------
+# Modals
+# --------------------------------------------------------------------------
+
+class CloseReasonModal(discord.ui.Modal, title="Close Ticket"):
+    reason = discord.ui.TextInput(
+        label="Reason for closing",
+        placeholder="e.g. Order completed, Resolved, Customer inactive...",
+        style=discord.TextStyle.paragraph,
+        max_length=500,
+        required=True,
+    )
+
+    def __init__(self, channel_id: int):
+        super().__init__()
+        self.channel_id = channel_id
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await close_ticket(
+            interaction, self.channel_id, reason=self.reason.value or "No reason provided"
+        )
+
+
+# --------------------------------------------------------------------------
+# Core actions
+# --------------------------------------------------------------------------
+
+async def create_ticket_channel(
+    interaction: discord.Interaction, kind: str, fields: dict[str, str] | None
+) -> None:
+    guild = interaction.guild
+    customer = interaction.user
+    if guild is None or not isinstance(customer, discord.Member):
+        return await interaction.response.send_message(
+            "This can only be used inside the server.", ephemeral=True
+        )
+
+    # Ephemeral => only the person who pressed the button sees it. It is a
+    # Components V2 panel from the start so it can later be edited into the
+    # "ticket opened" panel (a plain message can't be edited into a V2 one).
+    await interaction.response.send_message(
+        view=notice_view("Creating your ticket...", discord.Colour.blurple()),
+        ephemeral=True,
+    )
+
+    channel: discord.TextChannel | None = None
+    try:
+        category_id = config.TICKET_CATEGORIES.get(kind, config.TICKET_CATEGORY)
+        category = guild.get_channel(category_id)
+        channel_name = f"gl-{kind}-{safe_name(customer.display_name)}"[:100]
+
+        channel = await guild.create_text_channel(
+            name=channel_name,
+            category=category if isinstance(category, discord.CategoryChannel) else None,
+            overwrites=ticket_overwrites(guild, customer, kind),
+            reason=f"Ticket opened by {customer} ({customer.id})",
+        )
+
+        # Safety net: make sure @everyone really cannot see the channel.
+        if channel.overwrites_for(guild.default_role).view_channel is not False:
+            await channel.set_permissions(
+                guild.default_role, view_channel=False, reason="Ticket must be private"
+            )
+
+        view = build_ticket_control_view(channel.id, kind, customer, fields, claimed_by=None)
+        panel_message = await channel.send(view=view)
+
+        await store.create(
+            channel.id,
+            customer_id=customer.id,
+            kind=kind,
+            fields=fields,
+            claimed_by=None,
+            panel_message_id=panel_message.id,
+            opened_at=dt.datetime.utcnow().isoformat(),
+        )
+    except Exception as exc:
+        # Without this, any error here is swallowed and the user is stuck on
+        # "Creating your ticket..." forever. Log the full traceback (visible
+        # in the Render logs) and tell the user something went wrong.
+        log.exception("Failed to create %s ticket for %s (%s)", kind, customer, customer.id)
+        if channel is not None:
+            try:
+                await channel.delete(reason="Ticket creation failed")
+            except discord.HTTPException:
+                pass
+        if isinstance(exc, discord.Forbidden):
+            reason = "I'm missing permissions (Manage Channels / access to the ticket category)."
+        elif isinstance(exc, discord.HTTPException):
+            reason = f"Discord rejected the request ({exc.status}: {exc.text})."
+        else:
+            reason = f"{type(exc).__name__}: {exc}"
+        await interaction.edit_original_response(
+            view=notice_view(f"Could not create your ticket. {reason}", discord.Colour.red())
+        )
+        return
+
+    await interaction.edit_original_response(view=build_ticket_opened_view(channel, kind))
+
+    try:
+        leaks = audit_ticket_visibility(channel, customer, kind)
+        if leaks:
+            log.warning(
+                "Ticket #%s is visible to %d member(s) who are not staff/customer:\n  %s",
+                channel.name, len(leaks), "\n  ".join(leaks[:15]),
+            )
+    except Exception:
+        log.exception("Visibility audit failed for channel %s", channel.id)
+
+    try:
+        await log_ticket_open(guild, channel, customer, kind, fields)
+    except Exception:
+        log.exception("Failed to log ticket open for channel %s", channel.id)
+
+
+async def close_ticket(interaction: discord.Interaction, channel_id: int, reason: str) -> None:
+    guild = interaction.guild
+    ticket = await store.get(channel_id)
+    channel = guild.get_channel(channel_id) if guild else None
+
+    if ticket is None or channel is None:
+        return await interaction.response.send_message(
+            "This ticket no longer exists.", ephemeral=True
+        )
+
+    # The modal submit path skips the button check, so re-check here:
+    # only the claimer or the CEO may close.
+    if not isinstance(interaction.user, discord.Member):
+        return await interaction.response.send_message(
+            "Only staff can close this ticket.", ephemeral=True
+        )
+    denied = close_denied_reason(interaction.user, ticket)
+    if denied:
+        return await interaction.response.send_message(denied, ephemeral=True)
+
+    customer = guild.get_member(ticket["customer_id"])
+    kind = ticket["kind"]
+    closed_at = dt.datetime.now(dt.timezone.utc)
+
+    await interaction.response.send_message(
+        f"{EMOJI['close']} Closing this ticket in 5 seconds..."
+    )
+
+    # Whatever happens below, the channel MUST be deleted at the end —
+    # every step is isolated so one failure can't leave the ticket stuck on
+    # "Closing this ticket in 5 seconds...". Errors show up in the Render logs.
+    try:
+        transcript_path = None
+        try:
+            transcript_file = await build_transcript(channel)
+            transcript_path = TRANSCRIPTS_DIR / f"{channel_id}.txt"
+            transcript_path.write_bytes(transcript_file.fp.getvalue())
+        except Exception:
+            log.exception("Failed to build transcript for channel %s", channel_id)
+            transcript_path = None
+
+        if customer is not None and transcript_path is not None:
+            try:
+                dm_view = build_transcript_view(
+                    channel=channel, kind=kind, ticket=ticket, closed_by=interaction.user,
+                    reason=reason, closed_at=closed_at, filename=transcript_path.name,
+                    button=DMTranscriptButton(channel.id),
+                )
+                await customer.send(
+                    view=dm_view,
+                    file=discord.File(transcript_path, filename=transcript_path.name),
+                )
+            except Exception:
+                # DMs closed (Forbidden) or anything else — never block the close.
+                log.exception("Could not DM the close notice to %s (%s)", customer, customer.id)
+
+        if transcript_path is not None:
+            try:
+                await log_ticket_close(
+                    guild, channel, customer, kind, interaction.user, reason, transcript_path,
+                    ticket=ticket, closed_at=closed_at,
+                )
+            except Exception:
+                log.exception("Failed to log ticket close for channel %s", channel_id)
+
+        try:
+            await store.delete(channel_id)
+        except Exception:
+            log.exception("Failed to delete ticket %s from the store", channel_id)
+    finally:
+        await asyncio.sleep(5)
+        try:
+            await channel.delete(reason=f"Ticket closed by {interaction.user} — {reason}")
+        except Exception:
+            log.exception("Failed to delete ticket channel %s", channel_id)
+
+
+def _opened_ts(ticket: dict | None) -> int | None:
+    raw = (ticket or {}).get("opened_at")
+    if not raw:
+        return None
+    try:
+        opened = dt.datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    if opened.tzinfo is None:  # stored with utcnow()
+        opened = opened.replace(tzinfo=dt.timezone.utc)
+    return int(opened.timestamp())
+
+
+def build_transcript_view(
+    *,
+    channel: discord.abc.GuildChannel,
+    kind: str,
+    ticket: dict | None,
+    closed_by: discord.abc.User,
+    reason: str,
+    closed_at: dt.datetime,
+    filename: str,
+    button: discord.ui.DynamicItem,
+) -> discord.ui.LayoutView:
+    """'Ticket Transcript' panel for every ticket kind. Used for the
+    customer's DM and for the staff log channel. The details list depends on
+    the kind; "Claimed By" is only listed when somebody claimed the ticket."""
+    small = discord.SeparatorSpacing.small
+
+    def sep(visible: bool = True) -> discord.ui.Separator:
+        return discord.ui.Separator(visible=visible, spacing=small)
+
+    dot = "<:name:1566128213858459848>"
+    opened = _opened_ts(ticket)
+    closed = int(closed_at.timestamp())
+    claimed_by = (ticket or {}).get("claimed_by")
+
+    fields = (ticket or {}).get("fields") or {}
+    lines = [f"> {dot} **Ticket Type:** {channel.name}"]
+    if kind == "purchase":
+        lines += [
+            f"> {dot} **Product:** {fields.get('bot_type') or '-'}",
+            f"> {dot} **Payment Method:** {fields.get('payment_method') or '-'}",
+            f"> {dot} **Status:** {fields.get('plan') or '-'}",
+        ]
+    elif kind == "order":
+        lines += [
+            f"> {dot} **Server:** {fields.get('server') or '-'}",
+            f"> {dot} **Budget:** {fields.get('budget') or '-'}",
+            f"> {dot} **Payment Method:** {fields.get('payment_method') or '-'}",
+            f"> {dot} **Product Description:** {(fields.get('description') or '-').strip() or '-'}",
+        ]
+    if claimed_by:
+        lines.append(f"> {dot} **Claimed By:** <@{claimed_by}>")
+    lines += [
+        f"> {dot} **Closed By:** {closed_by.mention}",
+        f"> {dot} **Time It Opened:** {f'<t:{opened}:F>' if opened else '-'}",
+        f"> {dot} **Time It Closed:** <t:{closed}:F>",
+        f"> {dot} **Reason:** {reason}",
+    ]
+
+    button.item.label = "〃 Transcript "
+    button.item.style = discord.ButtonStyle.secondary
+    button.item.emoji = discord.PartialEmoji(name="name", id=1545576883536793621)
+
+    banner = getattr(config, "TRANSCRIPT_BANNER_URL", None) or getattr(config, "INFO_PANEL_BANNER_URL", None)
+    logo = getattr(config, "TRANSCRIPT_LOGO_URL", None) or getattr(config, "PURCHASE_PANEL_LOGO_URL", None)
+
+    intro = discord.ui.TextDisplay(
+        f"> {dot} *Your private ticket has closed. You can see the details and the ticket transcript below.* "
+    )
+    children: list = [sep()]
+    if banner:
+        children += [discord.ui.MediaGallery(discord.MediaGalleryItem(banner)), sep()]
+    children += [
+        discord.ui.TextDisplay("## <:name:1545831836339409048> 〃 **__G3 Service™ - Ticket Transcript__** "),
+        sep(),
+        discord.ui.Section(intro, accessory=discord.ui.Thumbnail(logo)) if logo else intro,
+        sep(),
+        sep(False),
+        discord.ui.TextDisplay("## <:name:1545553071872933898> 〃 ***__Ticket Details__*** "),
+        sep(),
+        discord.ui.TextDisplay("\n".join(lines)),
+        sep(),
+        sep(False),
+        discord.ui.TextDisplay("## <:name:1545576883536793621> 〃 ***__Transcript__*** "),
+        sep(),
+        discord.ui.TextDisplay(
+            f"> {dot} *Below you can see the transcript and download it if you want.* "
+        ),
+        discord.ui.ActionRow(button),
+        sep(),
+        discord.ui.File(f"attachment://{filename}"),
+        sep(),
+        discord.ui.TextDisplay(
+            "<:name:1545831836339409048> 〃 **G3 Service™, All Rights Reserved © "
+            "<:Dot:1545576267904974859> Ticket Center **"
+        ),
+        sep(),
+    ]
+    view = discord.ui.LayoutView(timeout=None)
+    view.add_item(discord.ui.Container(*children, accent_colour=0x0090FF))
+    return view
+
+
+async def log_ticket_open(
+    guild: discord.Guild,
+    channel: discord.TextChannel,
+    customer: discord.Member,
+    kind: str,
+    fields: dict[str, str] | None,
+) -> None:
+    log_channel = await get_log_channel(guild, kind)
+    if log_channel is None:
+        return
+
+    view = discord.ui.LayoutView(timeout=None)
+
+    header = discord.ui.TextDisplay(
+        f"{EMOJI['log_open']} **Ticket Opened**\n"
+        f"**Customer:** {customer.mention} ({customer.id})\n"
+        f"**Type:** {kind.title()} — **Channel:** {channel.mention}"
+    )
+    texts = [header]
+    details_text = format_ticket_details(kind, fields)
+    if fields:
+        texts.append(discord.ui.TextDisplay(details_text))
+    section = discord.ui.Section(
+        *texts, accessory=discord.ui.Thumbnail(media=customer.display_avatar.url)
+    )
+    container = discord.ui.Container(section, accent_colour=discord.Colour.green())
+    view.add_item(container)
+    await log_channel.send(view=view)
+
+
+async def log_ticket_close(
+    guild: discord.Guild,
+    channel: discord.abc.GuildChannel,
+    customer: discord.Member | None,
+    kind: str,
+    closed_by: discord.abc.User,
+    reason: str,
+    transcript_path,
+    ticket: dict | None = None,
+    closed_at: dt.datetime | None = None,
+) -> None:
+    log_channel = await get_log_channel(guild, kind)
+    if log_channel is None:
+        return
+
+    view = build_transcript_view(
+        channel=channel, kind=kind, ticket=ticket, closed_by=closed_by, reason=reason,
+        closed_at=closed_at or dt.datetime.now(dt.timezone.utc),
+        filename=transcript_path.name, button=TranscriptButton(channel.id),
+    )
+    await log_channel.send(view=view, file=discord.File(transcript_path, filename=transcript_path.name))
+
+
+# --------------------------------------------------------------------------
+# Cog
+# --------------------------------------------------------------------------
+
+class Tickets(commands.Cog):
+    def __init__(self, bot: commands.Bot) -> None:
+        self.bot = bot
+
+    @app_commands.command(
+        name="ticket-audit",
+        description="Check who can see tickets / log channels and why (admin only)",
+    )
+    @app_commands.describe(member="A member who can see this ticket but shouldn't - explains why")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def ticket_audit(
+        self, interaction: discord.Interaction, member: discord.Member | None = None
+    ) -> None:
+        guild = interaction.guild
+        if guild is None:
+            return await interaction.response.send_message("Server only.", ephemeral=True)
+        await interaction.response.defer(ephemeral=True)
+
+        lines: list[str] = []
+
+        def everyone_can_see(ch: discord.abc.GuildChannel | None) -> str:
+            if ch is None:
+                return "NOT FOUND (wrong ID or bot cannot see it)"
+            seen = ch.permissions_for(guild.default_role).view_channel
+            return "VISIBLE TO @everyone" if seen else "private"
+
+        lines.append("**Channels used by the ticket system**")
+        checks = {
+            "Purchase/Order log (CHANNEL_LOG)": config.CHANNEL_LOG,
+            "Support log (SUPPORT_LOG_CHANNEL)": config.SUPPORT_LOG_CHANNEL,
+            "Orders channel (CHANNEL_ORDERS)": config.CHANNEL_ORDERS,
+            "Orders log (CHANNEL_ORDERS_LOG)": config.CHANNEL_ORDERS_LOG,
+        }
+        for label, cid in checks.items():
+            ch = guild.get_channel(cid)
+            lines.append(f"- {label}: {ch.mention if ch else cid} -> {everyone_can_see(ch)}")
+
+        lines.append("\n**Ticket categories**")
+        for kind, cid in config.TICKET_CATEGORIES.items():
+            ch = guild.get_channel(cid)
+            lines.append(f"- {kind}: {ch.name if ch else cid} -> {everyone_can_see(ch)} (tickets get their own overwrites, so this is informational)")
+
+        ticket = await store.get(interaction.channel.id)
+        if ticket is not None and isinstance(interaction.channel, discord.TextChannel):
+            customer = guild.get_member(ticket["customer_id"])
+            if customer is not None:
+                leaks = audit_ticket_visibility(interaction.channel, customer, ticket["kind"])
+                lines.append(f"\n**This ticket ({ticket['kind']})** - non-staff who can see it: {len(leaks)}")
+                lines.extend(f"- {leak}" for leak in leaks[:15])
+                if not leaks:
+                    lines.append("- nobody besides the customer, the bot and staff")
+                if guild.chunked is False:
+                    lines.append("-# Member cache is incomplete, result may miss people.")
+        else:
+            lines.append("\n-# Run this inside an open ticket channel to also see who can view that ticket.")
+
+        if ticket is not None and isinstance(interaction.channel, discord.TextChannel):
+            staff_ids = set(staff_role_ids_for_kind(ticket["kind"]))
+            holders = [m for m in guild.members if any(r.id in staff_ids for r in m.roles)]
+            staff_names = [r.name for r in guild.roles if r.id in staff_ids]
+            lines.append(
+                f"\n**Staff roles for this ticket:** {', '.join(staff_names) or 'none found'} "
+                f"-> {len(holders)} member(s) hold them (they always see it)"
+            )
+
+        if member is not None and isinstance(interaction.channel, discord.TextChannel):
+            # Fetch the channel fresh from Discord so we compare with what
+            # Discord really has, not with the bot's cache.
+            fresh = await guild.fetch_channel(interaction.channel.id)
+            lines.append(f"\n**Why {member} can see this channel**")
+            lines.append(f"- Real permission calc: view_channel = {fresh.permissions_for(member).view_channel}")
+            base = member.guild_permissions
+            lines.append(
+                f"- Server-wide: administrator={base.administrator}, "
+                f"manage_channels={base.manage_channels}, manage_roles={base.manage_roles}"
+            )
+
+            def state(ow: discord.PermissionOverwrite) -> str:
+                return {True: "ALLOW", False: "DENY", None: "neutral"}[ow.view_channel]
+
+            lines.append(f"- @everyone overwrite on this channel: {state(fresh.overwrites_for(guild.default_role))}")
+            for role in member.roles:
+                if role.id == guild.id:
+                    continue
+                tag = " (staff role)" if ticket and role.id in set(staff_role_ids_for_kind(ticket["kind"])) else ""
+                lines.append(
+                    f"- role {role.name}{tag}: view overwrite={state(fresh.overwrites_for(role))}, "
+                    f"role administrator={role.permissions.administrator}"
+                )
+            lines.append(f"- member overwrite: {state(fresh.overwrites_for(member))}")
+
+        await interaction.followup.send("\n".join(lines)[:1990], ephemeral=True)
+
+
+async def setup(bot: commands.Bot) -> None:
+    for item_cls in (
+        ClaimButton, PingButton, CloseButton, TranscriptButton, ModifyButton, DMTranscriptButton
+    ):
+        bot.add_dynamic_items(item_cls)
+    await bot.add_cog(Tickets(bot))
