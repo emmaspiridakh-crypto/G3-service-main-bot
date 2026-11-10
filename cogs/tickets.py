@@ -369,7 +369,7 @@ class CloseButton(
         super().__init__(
             discord.ui.Button(
                 label="Close",
-                style=discord.ButtonStyle.danger,
+                style=discord.ButtonStyle.secondary,
                 emoji=EMOJI["close"],
                 custom_id=f"ticket:close:{channel_id}",
             )
@@ -739,7 +739,7 @@ class RemoveMemberView(discord.ui.LayoutView):
 
 def format_ticket_details(kind: str, fields: dict[str, str] | None) -> str:
     if not fields:
-        return "Please describe what you need below — a member of staff will be with you shortly."
+        return "Please describe what you need below a member of staff will be with you shortly."
 
     if kind == "purchase":
         return (
