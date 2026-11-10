@@ -16,8 +16,8 @@ class JoinPing(commands.Cog):
 
     @app_commands.command(name="setchannel", description="Ορίζει το κανάλι για το ping όταν μπαίνει μέλος")
     @app_commands.describe(
-        channel="Το κανάλι όπου θα γίνεται το tag του νέου μέλους",
-        ping_role="Προαιρετικό ρόλος που θα κάνει tag",
+        channel="Το κανάλι όπου θα γίνεται το tag",
+        ping_role="Role που θα κάνει tag",
     )
     @slash_is_ownership_only()
     async def setchannel(
