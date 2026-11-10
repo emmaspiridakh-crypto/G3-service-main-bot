@@ -46,7 +46,7 @@ def build_panel_view() -> ui.LayoutView:
         ui.Separator(visible=True, spacing=SMALL),
         ui.TextDisplay(
             f"> - {_e('note')} Before making a purchase, we recommend that you carefully read our "
-            "__ToS__ and our __privacy policy__. You can also check the __FAQ__ if you have any questions."
+            "__ToS__ and our __privacy policy__."
         ),
         ui.Separator(visible=True, spacing=SMALL),
     ]
@@ -63,7 +63,6 @@ def build_panel_view() -> ui.LayoutView:
         ui.ActionRow(
             btn(" 〃 ToS", "tos", "info:tos"),
             btn("〃 Privacy Policy", "privacy", "info:privacy"),
-            btn("〃 FaQ", "faq", "info:faq"),
         ),
         ui.Separator(visible=True, spacing=SMALL),
         ui.TextDisplay(
@@ -229,36 +228,9 @@ def build_faq_view() -> ui.LayoutView:
             ui.TextDisplay(f"> {answer}"),
             _sep(LARGE),
         ]
-
-    children: list = [
-        ui.TextDisplay("## <:name:1548740498603122788> 〃 **__FREQUENTLY ASKED QUESTIONS (FaQ)__**"),
-        _sep(),
-        _intro(ui.TextDisplay("*__Welcome to G3 Service FaQ! Here are answers to some of our most common questions.__*")),
-        _sep(LARGE),
-    ]
-    children += q("1545576824380067860", "What do you sell?",
-                  "We provide a variety of Discord bots. Check our shop or open a ticket for available products.")
-    children += q("1545553195760099358", "What payment methods do you accept?",
-                  "Available payment methods may vary. Please contact Support before purchasing to confirm the available options.")
-    children += q("1545578583332757665", "How will I receive my product?",
-                  "After your payment has been confirmed, our team will provide your purchased product or delivery instructions.")
-    children += q("1545553071872933898", "How do I purchase something?",
-                  "Open a Purchase Ticket and tell us which product you are interested in. A member of our team will assist you.")
-    children += q("1545577232922312734", "I have an issue with my product. What should I do?",
-                  "Open a Technical Support Ticket and provide details about the issue. Our team will help you troubleshoot it")
-    children += q("1548741673109037116", "Can I get a refund?",
-                  "Refunds depend on the product and the circumstances of the purchase. Please read our Refund Policy or contact Support before purchasing.")
-    children += q("1566484521073905824", "Is my information safe?",
-                  "Yes. We take privacy seriously and only use necessary information to provide our services. Please see our Privacy Policy for more information.")
-    children += q("1566453777131774022", "How long does delivery take?",
-                  "Delivery times depend on the product and whether it is automated or manually delivered. Support can provide an estimated timeframe.")
-    children += q("1566453662937649182", "Can I request a custom bot?",
-                  "If custom development is available, open an Order Ticket and explain what you need.")
-    children += q("1548745357717012501", "Still have a question?",
-                  "No problem! Open a Support Ticket and our team will be happy to help.")
     children += [
         ui.TextDisplay(f"**__Professional__{DOT} __Reliable__{DOT} __Secure__**"),
-        ui.TextDisplay(f"<:name:1545831836339409048> 〃** G3 Service, All Rights Reserved {DOT} FaQ**"),
+        ui.TextDisplay(f"<:name:1545831836339409048> 〃** G3 Service, All Rights Reserved {DOT} Informations**"),
         _sep(),
     ]
     return _wrap(*children, accent=0x006EFF)
@@ -268,7 +240,6 @@ def build_faq_view() -> ui.LayoutView:
 SECTION_BUILDERS: dict[str, Callable[[], ui.LayoutView]] = {
     "tos": build_tos_view,
     "privacy": build_privacy_view,
-    "faq": build_faq_view,
 }
 
 
@@ -276,7 +247,7 @@ class InfoPanel(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @app_commands.command(name="panel-info", description="Send the Informations panel (ToS / Privacy / FaQ)")
+    @app_commands.command(name="panel-info", description="Send the Informations panel")
     @slash_is_ownership_only()
     async def panel_info(self, interaction: discord.Interaction):
         # Acknowledge first (Discord gives only 3 seconds), then post the panel.
