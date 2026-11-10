@@ -59,9 +59,9 @@ class TicketCenterView(ui.LayoutView):
             placeholder="@💰 〃 Purchase Center ",
             options=[
                 discord.SelectOption(label="〃 Order ", value="order",
-                                     description="Order a Custom Bot ", emoji=_pe(1545578583332757665)),
+                                     description="Order a custom product ", emoji=_pe(1545578583332757665)),
                 discord.SelectOption(label="〃 Purchase ", value="purchase",
-                                     description="Purchase an existing bot", emoji=_pe(1545553195760099358)),
+                                     description="Purchase an existing product", emoji=_pe(1545553195760099358)),
             ],
         )
         purchase_select.callback = self.on_purchase
@@ -71,7 +71,7 @@ class TicketCenterView(ui.LayoutView):
             placeholder="@⚙️ 〃 Issues/Replacement ",
             options=[
                 discord.SelectOption(label="〃 Technical Issue ", value="technical",
-                                     description="Problem with the bot", emoji=_pe(1545577232922312734)),
+                                     description="Problem with the product", emoji=_pe(1545577232922312734)),
                 discord.SelectOption(label="〃 Payment Issue ", value="billing",
                                      description="Problem with the payment ", emoji=_pe(1545553195760099358)),
                 discord.SelectOption(label="〃 Replacement ", value="replacement",
@@ -123,17 +123,17 @@ class TicketCenterView(ui.LayoutView):
             sep(),
             ui.TextDisplay("## <:name:1548349993830850713> 〃 __***Purchase Center***__"),
             ui.TextDisplay(
-                "*To purchase a custom bot or to order an existing bot.*\n"
-                "> <:name:1545576267904974859> **Order** — To order a custom bot suited to your needs\n"
-                "> <:name:1545576267904974859> **Purchase** — To buy an existing bot"
+                "*To purchase a custom product or to order an existing product.*\n"
+                "> <:name:1545576267904974859> **Order** — To order a custom product suited to your needs\n"
+                "> <:name:1545576267904974859> **Purchase** — To buy an existing product"
             ),
             sep(),
             ui.ActionRow(purchase_select),
             sep(),
             ui.TextDisplay("## <:name:1545577232922312734> 〃 ***__Issues/Replacement__*** "),
             ui.TextDisplay(
-                "*If you want a product replacement, something goes wrong with the bot or the payment. * \n"
-                "> <:name:1545576267904974859> **Technical Issue** — Problem with the bot\n"
+                "*If you want a product replacement, something goes wrong with the product or the payment. * \n"
+                "> <:name:1545576267904974859> **Technical Issue** — Problem with the product\n"
                 "> <:name:1545576267904974859> **Payment Issue** — Problem with the payment or questions \n"
                 "> <:name:1545576267904974859> **Replacement** — Replace a product "
             ),
@@ -188,12 +188,12 @@ class TicketCenter(commands.Cog):
 
     @app_commands.command(
         name="send-ticket-center",
-        description="Post the unified Ticket Center panel (Support / Purchase / Issues) in this channel",
+        description="Ticket Center panel",
     )
     @app_commands.checks.has_permissions(administrator=True)
     async def send_ticket_center(self, interaction: discord.Interaction) -> None:
         await interaction.channel.send(view=TicketCenterView())
-        await interaction.response.send_message("Ticket Center panel sent.", ephemeral=True)
+        await interaction.response.send_message("panel sent.", ephemeral=True)
 
 
 async def setup(bot: commands.Bot) -> None:
