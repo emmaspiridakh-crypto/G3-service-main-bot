@@ -163,11 +163,12 @@ def build_panel_view() -> ui.LayoutView:
         ),
         ui.Separator(visible=True, spacing=SMALL),
         ui.ActionRow(
-            ui.Button(style=discord.ButtonStyle.primary, label="My Invites", emoji=_e("my_invites", "📨"), custom_id="invites:me"),
+            ui.Button(style=discord.ButtonStyle.secondary, label="My Invites", emoji=_e("my_invites", "📨"), custom_id="invites:me"),
             ui.Button(style=discord.ButtonStyle.secondary, label="Leaderboard", emoji=_e("leaderboard", "🏆"), custom_id="invites:top"),
         ),
         ui.Separator(visible=True, spacing=SMALL),
         ui.TextDisplay(f"-# {_e('footer')} 〃 **G3 Service, All Rights Reserved {_e('bullet', '•')} Invites**"),
+        ui.Separator(visible=True, spacing=SMALL),
     ]
     view = ui.LayoutView(timeout=None)
     view.add_item(ui.Container(*children, accent_colour=INVITES_ACCENT))
@@ -223,7 +224,7 @@ def build_log_view(member: discord.Member, inviter_id: int, *, joined: bool, sta
     else:
         title = f"{_e('log_leave', '📤')} 〃 __**Member Left**__"
         colour = 0xE74C3C
-    inviter_text = f"<@{inviter_id}> (`{inviter_id}`)" if inviter_id else "*Unknown (vanity URL / deleted invite)*"
+    inviter_text = f"<@{inviter_id}> (`{inviter_id}`)" if inviter_id else "*Unknown*"
     lines = [
         f"> {_e('user', '👤')} **Member:** {member.mention} (`{member.id}`)",
         f"> {_e('inviter', '📨')} **Invited by:** {inviter_text}",
@@ -239,6 +240,7 @@ def build_log_view(member: discord.Member, inviter_id: int, *, joined: bool, sta
         ui.TextDisplay("\n".join(lines)),
         ui.Separator(visible=True, spacing=SMALL),
         ui.TextDisplay(f"-# {_e('footer')} 〃 **G3 Service {_e('bullet', '•')} Invite Logs**"),
+        ui.Separator(visible=True, spacing=SMALL),
     ]
     view = ui.LayoutView(timeout=None)
     view.add_item(ui.Container(*children, accent_colour=colour))
@@ -363,8 +365,8 @@ class Invites(commands.Cog):
         await interaction.channel.send(view=build_panel_view())
         await interaction.followup.send("Panel sent.", ephemeral=True)
 
-    @app_commands.command(name="invites", description="Show how many people you (or someone else) invited")
-    @app_commands.describe(member="The member to check (default: you)")
+    @app_commands.command(name="invites", description="Show how many people you invited")
+    @app_commands.describe(member="The member to check")
     @app_commands.guild_only()
     async def invites(self, interaction: discord.Interaction, member: discord.Member | None = None):
         target = member or interaction.user
