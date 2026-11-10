@@ -107,7 +107,7 @@ class Suggestions(commands.Cog):
                 warning = await message.channel.send(
                     f"{emoji('suggestions', 'suggestion') or '⚠️'} {author.mention} No links or tags **{reason}** inside the suggestions."
                 )
-                await warning.delete(delay=6)
+                await warning.delete(delay=4)
             except discord.HTTPException:
                 pass
             return
