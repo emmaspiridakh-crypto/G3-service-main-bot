@@ -74,7 +74,7 @@ class CreateGiveawayModal(ui.Modal, title="Δημιουργία Giveaway"):
     prize = ui.TextInput(label="Έπαθλο", placeholder="π.χ. Discord Nitro", max_length=200, required=True)
     duration = ui.TextInput(label="Διάρκεια", placeholder="π.χ. 1d, 2h, 30m, 1h30m", max_length=20, required=True)
     winners = ui.TextInput(label="Αριθμός νικητών", placeholder="1", max_length=2, required=True, default="1")
-    required_role = ui.TextInput(label="Required Role ID (προαιρετικό)", placeholder="Αφησε κενό αν δεν θεσ", required=False, max_length=20)
+    required_role = ui.TextInput(label="Required Role ID (αν θες)", placeholder="Αφησε κενό αν δεν θεσ", required=False, max_length=20)
 
     def __init__(self, cog: "Giveaways"):
         super().__init__()
@@ -83,13 +83,13 @@ class CreateGiveawayModal(ui.Modal, title="Δημιουργία Giveaway"):
     async def on_submit(self, interaction: discord.Interaction):
         delta = _parse_duration(str(self.duration))
         if not delta:
-            await interaction.response.send_message("Λάθος format διάρκειας. Χρήση: `1d`, `2h`, `30m`, `1h30m`", ephemeral=True)
+            await interaction.response.send_message("Λάθος format. Χρήση: `1d`, `2h`, `30m`, `1h30m`", ephemeral=True)
             return
 
         try:
             winner_count = max(1, int(str(self.winners)))
         except ValueError:
-            await interaction.response.send_message("Ο αριθμός νικητών πρέπει να είναι αριθμός.", ephemeral=True)
+            await interaction.response.send_message("Ο αριθμός νικητών πρέπει να είναι αριθμός βλακα.", ephemeral=True)
             return
 
         role_id = None
@@ -101,7 +101,7 @@ class CreateGiveawayModal(ui.Modal, title="Δημιουργία Giveaway"):
                     await interaction.response.send_message("Δεν βρέθηκε ρόλος με αυτό το ID.", ephemeral=True)
                     return
             except ValueError:
-                await interaction.response.send_message("Το Required Role ID πρέπει να είναι αριθμός.", ephemeral=True)
+                await interaction.response.send_message("Το Required Role ID πρέπει να είναι αριθμός μπαγλαμα.", ephemeral=True)
                 return
 
         await interaction.response.defer(ephemeral=True)
@@ -117,7 +117,7 @@ class CreateGiveawayModal(ui.Modal, title="Δημιουργία Giveaway"):
 class EditGiveawayModal(ui.Modal, title="Επεξεργασία Giveaway"):
     prize = ui.TextInput(label="Νέο Έπαθλο", max_length=200, required=False)
     duration_add = ui.TextInput(label="Χρόνος +/- (προαιρετικό)", placeholder="π.χ. 1h προσθέτει, -30m αφαιρεί", required=False, max_length=20)
-    winners = ui.TextInput(label="Νέος αριθμός νικητών (προαιρετικό)", required=False, max_length=2)
+    winners = ui.TextInput(label="Νέος αριθμός νικητών (αν θες)", required=False, max_length=2)
     required_role = ui.TextInput(label="Required Role ID (0 για αφαίρεση)", required=False, max_length=20)
 
     def __init__(self, giveaway_id: str, cog: "Giveaways"):
@@ -204,7 +204,7 @@ class AddMemberModal(ui.Modal, title="Προσθήκη Μελών στο Giveawa
     users = ui.TextInput(
         label="User ID(s)",
         style=discord.TextStyle.paragraph,
-        placeholder="Ένα ή περισσότερα ID, χωρισμένα με κόμμα/κενό/νέα γραμμή",
+        placeholder="Ένα ή περισσότερα ID, χωρισμένα με κόμμα,κενό,νέα γραμμή",
         max_length=1000,
         required=True,
     )
@@ -694,7 +694,7 @@ class Giveaways(commands.Cog):
         gw_fresh["status"] = "ended"
         gw_fresh["entries"] = pool
         await self.end_giveaway(gw_fresh, reroll=True, forced_by=interaction.user)
-        await interaction.followup.send("Reroll ολοκληρώθηκε!", ephemeral=True)
+        await interaction.followup.send("Reroll ολοκληρώθηκε", ephemeral=True)
 
     async def _handle_end_now(self, interaction: discord.Interaction, gw_id: str):
         gw = await self.db_get(gw_id)
@@ -759,8 +759,8 @@ class Giveaways(commands.Cog):
     async def giveaway_create(self, interaction: discord.Interaction):
         await interaction.response.send_modal(CreateGiveawayModal(self))
 
-    @giveaway_group.command(name="delete", description="Διαγράφει giveaway (CEO only)")
-    @app_commands.describe(giveaway_id="Το ID του giveaway (χωρίς #)")
+    @giveaway_group.command(name="delete", description="Διαγράφει giveaway")
+    @app_commands.describe(giveaway_id="Το ID του giveaway χωρίς #")
     @app_commands.checks.has_any_role(config.CEO_ROLE_ID)
     async def giveaway_delete(self, interaction: discord.Interaction, giveaway_id: str):
         gw = await self.db_get(giveaway_id.upper())
