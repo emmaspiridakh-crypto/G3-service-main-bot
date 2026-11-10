@@ -227,7 +227,7 @@ class Applications(commands.Cog):
 
     # ---- commands ---------------------------------------------------------
 
-    @app_commands.command(name="panel-staff-applications", description="Send the Staff / Manager Application panel")
+    @app_commands.command(name="panel-staff-applications", description="Send the Application panel")
     @slash_is_ownership_only()
     async def panel_staff_applications(self, interaction: discord.Interaction):
         await interaction.channel.send(view=build_staff_panel_view())
