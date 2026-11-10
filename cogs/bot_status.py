@@ -61,7 +61,7 @@ class BotStatus(commands.Cog):
 
     def _build_activity(self, entry: dict) -> discord.Activity:
         activity_type = entry.get("type", "watching")
-        text = entry.get("text", "τον server")
+        text = entry.get("text", "G3 Service")
         return discord.Activity(
             type=ACTIVITY_TYPES.get(activity_type, discord.ActivityType.watching),
             name=text,
@@ -115,8 +115,8 @@ class BotStatus(commands.Cog):
     async def before_rotate(self):
         await self.bot.wait_until_ready()
 
-    @app_commands.command(name="setstatus", description="Αλλάζει το status του bot (σταθερό, απενεργοποιεί το rotation)")
-    @app_commands.describe(type="Τύπος status", text="Το κείμενο που θα εμφανίζεται")
+    @app_commands.command(name="setstatus", description="Αλλάζει το status του bot")
+    @app_commands.describe(type="Τύπος status", text="Το κείμενο")
     @app_commands.choices(type=[
         app_commands.Choice(name="Playing", value="playing"),
         app_commands.Choice(name="Watching", value="watching"),
@@ -125,7 +125,7 @@ class BotStatus(commands.Cog):
     ])
     async def setstatus(self, interaction: discord.Interaction, type: app_commands.Choice[str], text: str):
         if not member_has_any_role(interaction.user, [config.CEO_ROLE_ID]):
-            await interaction.response.send_message(" Μόνο o CEO μπορεί να αλλάξει το status του bot.", ephemeral=True)
+            await interaction.response.send_message(" Μόνο o CEO μπορεί να αλλάξει το status.", ephemeral=True)
             return
 
         data = self._get_data()
@@ -139,7 +139,7 @@ class BotStatus(commands.Cog):
             f"Το status ενημερώθηκε: **{type.name} {text}**", ephemeral=True
         )
 
-    @app_commands.command(name="setpresence", description="Αλλάζει την εμφάνιση του bot (online/idle/dnd/invisible)")
+    @app_commands.command(name="setpresence", description="(online/idle/dnd/invisible)")
     @app_commands.describe(status="Η κατάσταση εμφάνισης")
     @app_commands.choices(status=[
         app_commands.Choice(name="Online", value="online"),
@@ -149,7 +149,7 @@ class BotStatus(commands.Cog):
     ])
     async def setpresence(self, interaction: discord.Interaction, status: app_commands.Choice[str]):
         if not member_has_any_role(interaction.user, [config.OWNERSHIP_ROLE_ID]):
-            await interaction.response.send_message(" Μόνο το Ownership μπορεί να αλλάξει την εμφάνιση του bot.", ephemeral=True)
+            await interaction.response.send_message(" Μόνο το Ownership μπορεί να αλλάξει την εμφάνιση.", ephemeral=True)
             return
 
         data = self._get_data()
@@ -163,8 +163,8 @@ class BotStatus(commands.Cog):
             ephemeral=True,
         )
 
-    @app_commands.command(name="addstatus", description="Προσθέτει ένα status στη λίστα εναλλαγής (rotation)")
-    @app_commands.describe(type="Τύπος status", text="Το κείμενο που θα εμφανίζεται")
+    @app_commands.command(name="addstatus", description="Προσθέτει ένα status στη λίστα")
+    @app_commands.describe(type="Τύπος status", text="Το κείμενο")
     @app_commands.choices(type=[
         app_commands.Choice(name="Playing", value="playing"),
         app_commands.Choice(name="Watching", value="watching"),
@@ -184,11 +184,11 @@ class BotStatus(commands.Cog):
 
         await interaction.response.send_message(
             f"Προστέθηκε στη λίστα: **{type.name} {text}** (τώρα έχει {len(statuses)} statuses).\n"
-            f"Χρησιμοποίησε `/togglerotation` για να ενεργοποιήσεις την αυτόματη εναλλαγή.",
+            f"Χρησιμοποίησε `/togglerotation` για να ενεργοποιήσεις την εναλλαγή.",
             ephemeral=True,
         )
 
-    @app_commands.command(name="removestatus", description="Αφαιρεί ένα status από τη λίστα εναλλαγής")
+    @app_commands.command(name="removestatus", description="Αφαιρεί ένα status από τη λίστα")
     @app_commands.describe(index="Ο αριθμός του status (δες με /liststatus)")
     async def removestatus(self, interaction: discord.Interaction, index: int):
         if not member_has_any_role(interaction.user, [config.OWNERSHIP_ROLE_ID]):
@@ -209,24 +209,24 @@ class BotStatus(commands.Cog):
             f"Αφαιρέθηκε: **{removed.get('text')}**", ephemeral=True
         )
 
-    @app_commands.command(name="liststatus", description="Δείχνει τη λίστα των statuses εναλλαγής")
+    @app_commands.command(name="liststatus", description="Δείχνει τη λίστα των statuses")
     async def liststatus(self, interaction: discord.Interaction):
         data = self._get_data()
         statuses = data.get("statuses") or []
         if not statuses:
-            await interaction.response.send_message("Δεν υπάρχουν statuses στη λίστα.", ephemeral=True)
+            await interaction.response.send_message("Δεν υπάρχουν statuses.", ephemeral=True)
             return
 
         lines = [f"{i+1}. **{s.get('type')}** — {s.get('text')}" for i, s in enumerate(statuses)]
-        state = "ενεργό ✅" if data.get("rotate") else "ανενεργό ❌"
+        state = "ενεργό" if data.get("rotate") else "ανενεργό"
         await interaction.response.send_message(
             f"**Rotation:** {state} | **Interval:** {data.get('interval')}s | **Presence:** {STATUS_NAMES_GR.get(data.get('presence'), data.get('presence'))}\n\n"
             + "\n".join(lines),
             ephemeral=True,
         )
 
-    @app_commands.command(name="togglerotation", description="Ενεργοποιεί/απενεργοποιεί την αυτόματη εναλλαγή status")
-    @app_commands.describe(interval="Δευτερόλεπτα ανάμεσα σε κάθε αλλαγή (προαιρετικό)")
+    @app_commands.command(name="togglerotation", description="Ενεργοποιεί/απενεργοποιεί τηνεναλλαγή status")
+    @app_commands.describe(interval="Δευτερόλεπτα ανάμεσα σε κάθε αλλαγή")
     async def togglerotation(self, interaction: discord.Interaction, interval: int | None = None):
         if not member_has_any_role(interaction.user, [config.OWNERSHIP_ROLE_ID]):
             await interaction.response.send_message(" Μόνο το Ownership μπορεί να το κάνει αυτό.", ephemeral=True)
@@ -235,7 +235,7 @@ class BotStatus(commands.Cog):
         data = self._get_data()
         if not data.get("statuses"):
             await interaction.response.send_message(
-                "Δεν έχεις προσθέσει statuses. Χρησιμοποίησε πρώτα `/addstatus`.", ephemeral=True
+                "Δεν έχεις προσθέσει statuses. Κανε πρώτα `/addstatus`.", ephemeral=True
             )
             return
 
@@ -245,7 +245,7 @@ class BotStatus(commands.Cog):
         storage.save(STORE, data)
         await self._apply_saved_status()
 
-        state = "ενεργοποιήθηκε ✅" if data["rotate"] else "απενεργοποιήθηκε ❌"
+        state = "ενεργοποιήθηκε" if data["rotate"] else "απενεργοποιήθηκε"
         await interaction.response.send_message(
             f"Το rotation {state} (κάθε {data.get('interval')}s).", ephemeral=True
         )
