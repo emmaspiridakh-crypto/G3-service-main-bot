@@ -10,43 +10,43 @@ def _env_or(env_name: str, value: str) -> str:
     return os.environ.get(env_name, value)
 
 
-GUILD_ID: int = 0
-ROLE_DEVELOPER: int = 0
-ROLE_CEO: int = 0
-ROLE_CO_CEO: int = 0
-ROLE_OWNERSHIP: int = 0
-ROLE_STAFF: int = 0
-ROLE_MANAGER: int = 0
+GUILD_ID: int = 1464632674495758554
+ROLE_DEVELOPER: int = 1569687193642082394
+ROLE_CEO: int = 1569103584400777367
+ROLE_CO_CEO: int = 1569104090682753135
+ROLE_OWNERSHIP: int = 1569810300738342972
+ROLE_STAFF: int = 1569104954377900094
+ROLE_MANAGER: int = 1569810451066523778
 
 # Convenience aliases used across cogs (bot_status, giveaways, permissions).
 CEO_ROLE_ID: int = ROLE_CEO
 OWNERSHIP_ROLE_ID: int = ROLE_OWNERSHIP
 
-CHANNEL_LOG: int = 0
-CHANNEL_ORDERS: int = 0
-CHANNEL_ORDERS_LOG: int = 0
-LOG_GIVEAWAY_CHANNEL_ID: int = 0
-REVIEWS_LOG_CHANNEL_ID: int = 0
-SUGGESTIONS_CHANNEL_ID: int = 0
+CHANNEL_LOG: int = 1569817235164364870
+CHANNEL_ORDERS: int = 1569811833282629795
+CHANNEL_ORDERS_LOG: int = 1569811866363109447
+LOG_GIVEAWAY_CHANNEL_ID: int = 1565870162605904022
+REVIEWS_LOG_CHANNEL_ID: int = 1569812449287213076
+SUGGESTIONS_CHANNEL_ID: int = 1569104247226638376
 
 # Banner image shown at the top of every suggestion. Upload the image to Discord,
 # copy its link and paste it here. Leave empty for no banner.
 SUGGESTIONS_BANNER_URL: str = _env_or("SUGGESTIONS_BANNER_URL", "")
 
-TICKET_CATEGORY: int = 0
+TICKET_CATEGORY: int = 1565870143584739338
 
 # Each ticket "kind" now gets its own category. Fill in real IDs — 0 falls
 # back to no category (channel created at the top level) until you do.
-CATEGORY_PURCHASE: int = 0
-CATEGORY_ORDER: int = 0
-CATEGORY_OWNER: int = 0
-CATEGORY_GENERAL: int = 0
-CATEGORY_TECHNICAL: int = 0
-CATEGORY_BILLING: int = 0
-CATEGORY_MANAGER: int = 0
+CATEGORY_PURCHASE: int = 1569811325847081001
+CATEGORY_ORDER: int = 1569811105872744448
+CATEGORY_OWNER: int = 1569811531904978994
+CATEGORY_GENERAL: int = 1569811591220830359
+CATEGORY_TECHNICAL: int = 1569811686918193162
+CATEGORY_BILLING: int = 1569811764747440388
+CATEGORY_MANAGER: int = 1569811794594242731
 
 # Replacement tickets. Fill in the real category ID (0 = top level).
-CATEGORY_REPLACEMENT: int = 0
+CATEGORY_REPLACEMENT: int = 1569813329159921787
 TICKET_CATEGORIES: dict[str, int] = {
     "purchase": CATEGORY_PURCHASE,
     "order": CATEGORY_ORDER,
@@ -60,22 +60,22 @@ TICKET_CATEGORIES: dict[str, int] = {
 
 # --- Unified Ticket Center panel (/send-ticket-center). Replace the URLs with
 # your own images. None = skip that element. ---
-TICKET_CENTER_BANNER_URL: str | None = ""
-TICKET_CENTER_THUMBNAIL_URL: str | None = ""
+TICKET_CENTER_BANNER_URL: str | None = "https://i.imgur.com/j4myBBI.jpeg"
+TICKET_CENTER_THUMBNAIL_URL: str | None = "https://i.imgur.com/ppkRp7r.jpeg"
 TICKET_CENTER_FOOTER_GIF_URL: str | None = ""
 
 # Target of the "Informations" link button on the panel.
-TICKET_CENTER_INFO_URL: str = ""
+TICKET_CENTER_INFO_URL: str = "https://discord.com/channels/1464632674495758554/1569817443835183194"
 
-TRANSCRIPT_BANNER_URL: str | None = ""
-TRANSCRIPT_LOGO_URL: str | None = ""
+TRANSCRIPT_BANNER_URL: str | None = "https://i.imgur.com/j4myBBI.jpeg"
+TRANSCRIPT_LOGO_URL: str | None = "https://i.imgur.com/ppkRp7r.jpeg"
 
 # Logo used by the Informations panel.
-PURCHASE_PANEL_LOGO_URL: str | None = ""
+PURCHASE_PANEL_LOGO_URL: str | None = "https://i.imgur.com/ppkRp7r.jpeg"
 
 # --- Informations panel (/panel-info). Set a URL, or None to skip that element. ---
 # Banner: replace with the URL of your global_banner image (currently reuses the purchase banner).
-INFO_PANEL_BANNER_URL: str | None = ""
+INFO_PANEL_BANNER_URL: str | None = "https://i.imgur.com/j4myBBI.jpeg"
 INFO_PANEL_LOGO_URL: str | None = PURCHASE_PANEL_LOGO_URL  # GLOBAL_LOGO
 
 # --- Ticket staff roles per ticket kind ---
@@ -95,22 +95,22 @@ TICKET_KIND_STAFF_ROLES: dict[str, list[int]] = {
     "replacement": [ROLE_DEVELOPER, ROLE_OWNERSHIP],
 }
 
-SUPPORT_LOG_CHANNEL: int = 0
+SUPPORT_LOG_CHANNEL: int = 1569813329159921787
 
 # --- Giveaways / Reviews banners ---
-GIVEAWAY_BANNER_URL: str | None = ""
-REVIEWS_BANNER_URL: str | None = ""
-REVIEWS_LOG_BANNER__URL: str | None = ""
-TICKET_PANEL_BANNER_URL: str | None = ""
+GIVEAWAY_BANNER_URL: str | None = "https://i.imgur.com/j4myBBI.jpeg"
+REVIEWS_BANNER_URL: str | None = "https://i.imgur.com/j4myBBI.jpeg"
+REVIEWS_LOG_BANNER__URL: str | None = "https://i.imgur.com/j4myBBI.jpeg"
+TICKET_PANEL_BANNER_URL: str | None = "https://i.imgur.com/j4myBBI.jpeg"
 
 # --- Shared application settings (used by Manager / Staff as fallback) ---
 # Category where each applicant's private application channel is created
 # (0 = no category, channel is created at the top level).
-APPLICATIONS_CATEGORY_ID: int = 0
+APPLICATIONS_CATEGORY_ID: int = 1569813803703734322
 
 # Staff-only channel where submitted applications arrive for review. REQUIRED —
 # applicants can't press "Sent" until this is filled in.
-APPLICATIONS_LOG_CHANNEL_ID: int = 0
+APPLICATIONS_LOG_CHANNEL_ID: int = 1569813885274300466
 
 # Roles that can see the application channels, use Ping User / Close.
 APPLICATION_STAFF_ROLE_IDS: list[int] = [ROLE_OWNERSHIP, ROLE_CEO, ROLE_CO_CEO]
@@ -119,10 +119,10 @@ APPLICATION_STAFF_ROLE_IDS: list[int] = [ROLE_OWNERSHIP, ROLE_CEO, ROLE_CO_CEO]
 APPLICATION_REVIEW_ROLE_IDS: list[int] = [ROLE_OWNERSHIP, ROLE_CEO, ROLE_CO_CEO]
 
 # Role given to the applicant when accepted (0 = give no role).
-APPLICATION_ACCEPTED_ROLE_ID: int = 0
+APPLICATION_ACCEPTED_ROLE_ID: int = 1569104954377900094
 
 # Banner shown at the top of the application panel (empty = no banner).
-APPLICATIONS_BANNER_URL: str | None = ""
+APPLICATIONS_BANNER_URL: str | None = "https://i.imgur.com/j4myBBI.jpeg"
 
 # --- Staff / Manager applications (/panel-staff-applications) ---
 # TEXT ONLY: no photos, files or
@@ -133,10 +133,10 @@ STAFF_APPLICATIONS_LOGO_URL: str | None = PURCHASE_PANEL_LOGO_URL
 
 # One shared Manager + Staff panel, but each type has its OWN application category and log channel.
 # Fill in the real IDs (0 = fall back to the shared application setting).
-MANAGER_APPLICATIONS_CATEGORY_ID: int = 0
-MANAGER_APPLICATIONS_LOG_CHANNEL_ID: int = 0
-STAFF_APPLICATIONS_CATEGORY_ID: int = 0
-STAFF_APPLICATIONS_LOG_CHANNEL_ID: int = 0
+MANAGER_APPLICATIONS_CATEGORY_ID: int = 1569813803703734322
+MANAGER_APPLICATIONS_LOG_CHANNEL_ID: int = 1569814181484433539
+STAFF_APPLICATIONS_CATEGORY_ID: int = 1569813803703734322
+STAFF_APPLICATIONS_LOG_CHANNEL_ID: int = 1569813885274300466
 
 # Roles given to the applicant when accepted (0 = give no role).
 MANAGER_APPLICATION_ACCEPTED_ROLE_ID: int = ROLE_MANAGER
@@ -186,10 +186,10 @@ APPLICATION_TYPES: dict[str, dict] = {
 }
 
 # --- Invites panel (/panel-invites). Banner image URL, or None to skip. ---
-INVITES_BANNER_URL: str | None = ""
+INVITES_BANNER_URL: str | None = "https://i.imgur.com/j4myBBI.jpeg"
 
 # Channel where join/leave invite logs are sent. 0 = use CHANNEL_LOG.
-INVITES_LOG_CHANNEL_ID: int = 0
+INVITES_LOG_CHANNEL_ID: int = 1565870155840618797
 BOT_TOKEN: str = _env_or("BOT_TOKEN", "PUT_YOUR_BOT_TOKEN_HERE")
 
 TURSO_URL: str = _env_or("TURSO_URL", "libsql://your-database-name.turso.io")
