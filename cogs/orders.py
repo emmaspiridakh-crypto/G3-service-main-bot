@@ -44,7 +44,13 @@ ORDER_LOG_STYLE = {
 
 async def get_orders_log_channel(guild: discord.Guild) -> discord.TextChannel | None:
     channel = guild.get_channel(config.CHANNEL_ORDERS_LOG)
-    return channel if isinstance(channel, discord.TextChannel) else None
+    if not isinstance(channel, discord.TextChannel):
+        logging.getLogger(__name__).warning(
+            "Orders log channel not found (id=%s). Set CHANNEL_ORDERS_LOG in config.py.",
+            config.CHANNEL_ORDERS_LOG,
+        )
+        return None
+    return channel
 
 
 async def log_order_event(
