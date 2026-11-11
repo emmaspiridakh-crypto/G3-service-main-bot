@@ -277,9 +277,10 @@ class Invites(commands.Cog):
                 self._cache[guild.id] = data
 
     async def _send_log(self, guild: discord.Guild, view: ui.LayoutView) -> None:
-        channel_id = getattr(config, "INVITES_LOG_CHANNEL_ID", 0) or config.CHANNEL_LOG
+        channel_id = getattr(config, "INVITES_LOG_CHANNEL_ID", 0)
         channel = guild.get_channel(channel_id) if channel_id else None
         if channel is None:
+            print(f"[invites] log channel not found (id={channel_id}) - set INVITES_LOG_CHANNEL_ID in config.py")
             return
         try:
             await channel.send(view=view, allowed_mentions=discord.AllowedMentions.none())
