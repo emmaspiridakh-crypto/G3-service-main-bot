@@ -5,12 +5,13 @@ import logging
 import datetime as dt
 
 import discord
+from emojis import emoji as _emoji
 from discord import app_commands
 from discord.ext import commands
 
 import config
 from utils.storage import store, order_store
-from cogs.tickets import is_staff, EMOJI, format_ticket_details as format_order_details
+from cogs.tickets import is_staff, format_ticket_details as format_order_details
 
 
 log = logging.getLogger(__name__)
@@ -34,10 +35,10 @@ def result_view(text: str, colour: discord.Colour = discord.Colour(0x3D91FF)) ->
 # --------------------------------------------------------------------------
 
 ORDER_LOG_STYLE = {
-    "placed": (EMOJI["place_order"], "Order Placed", discord.Colour.gold()),
-    "accepted": (EMOJI["order_accept"], "Order Accepted", discord.Colour.blue()),
-    "completed": (EMOJI["order_done"], "Order Completed", discord.Colour.green()),
-    "cancelled": (EMOJI["order_cancel"], "Order Cancelled", discord.Colour.red()),
+    "placed": (_emoji('general','place_order'), "Order Placed", discord.Colour.gold()),
+    "accepted": (_emoji('general','order_accept'), "Order Accepted", discord.Colour.blue()),
+    "completed": (_emoji('general','order_done'), "Order Completed", discord.Colour.green()),
+    "cancelled": (_emoji('general','order_cancel'), "Order Cancelled", discord.Colour.red()),
 }
 
 
@@ -105,7 +106,7 @@ class TicketPickerView(discord.ui.LayoutView):
                     label=f"#{channel.name}",
                     value=str(ticket["channel_id"]),
                     description=f"{ticket['kind'].title()} — {member.display_name if member else 'Unknown'}"[:100],
-                    emoji=EMOJI["purchase"] if ticket["kind"] == "purchase" else EMOJI["order"],
+                    emoji=(_emoji('general','purchase') if ticket["kind"] == "purchase" else _emoji('general','order')) or None,
                 )
             )
 
@@ -118,7 +119,7 @@ class TicketPickerView(discord.ui.LayoutView):
         select.callback = self.on_select
 
         container = discord.ui.Container(
-            discord.ui.TextDisplay(f"{EMOJI['place_order']} **Place Order — choose a ticket**"),
+            discord.ui.TextDisplay(f"{_emoji('general','place_order')} **Place Order — choose a ticket**"),
             discord.ui.ActionRow(select),
             accent_colour=discord.Colour(0x3D91FF),
         )
@@ -153,20 +154,20 @@ class OrderConfirmView(discord.ui.LayoutView):
         confirm_btn = discord.ui.Button(
             label="Confirm",
             style=discord.ButtonStyle.success,
-            emoji=EMOJI["order_accept"],
+            emoji=(_emoji('general','order_accept') or None),
         )
         confirm_btn.callback = self.on_confirm
 
         cancel_btn = discord.ui.Button(
             label="Cancel",
             style=discord.ButtonStyle.danger,
-            emoji=EMOJI["order_cancel"],
+            emoji=(_emoji('general','order_cancel') or None),
         )
         cancel_btn.callback = self.on_cancel
 
         container = discord.ui.Container(
             discord.ui.TextDisplay(
-                f"{EMOJI['place_order']} **Confirm order**\n"
+                f"{_emoji('general','place_order')} **Confirm order**\n"
                 f"Customer: {member.mention if member else 'Unknown'}\n"
                 f"Ticket: {channel.mention if channel else '#unknown'} ({ticket['kind'].title()})"
             ),
@@ -181,7 +182,7 @@ class OrderConfirmView(discord.ui.LayoutView):
 
     async def on_cancel(self, interaction: discord.Interaction) -> None:
         await interaction.response.edit_message(
-            view=result_view(f"{EMOJI['order_cancel']} Cancelled.", discord.Colour.red())
+            view=result_view(f"{_emoji('general','order_cancel')} Cancelled.", discord.Colour.red())
         )
 
 
@@ -190,10 +191,10 @@ class OrderConfirmView(discord.ui.LayoutView):
 # --------------------------------------------------------------------------
 
 STATUS_TEXT = {
-    "pending": f"{EMOJI['order_pending']} **Pending**",
-    "accepted": f"{EMOJI['order_accept']} **Accepted**",
-    "completed": f"{EMOJI['order_done']} **Completed**",
-    "cancelled": f"{EMOJI['order_cancel']} **Cancelled**",
+    "pending": f"{_emoji('general','order_pending')} **Pending**",
+    "accepted": f"{_emoji('general','order_accept')} **Accepted**",
+    "completed": f"{_emoji('general','order_done')} **Completed**",
+    "cancelled": f"{_emoji('general','order_cancel')} **Cancelled**",
 }
 
 
@@ -207,7 +208,7 @@ class AcceptButton(
             discord.ui.Button(
                 label="Accept",
                 style=discord.ButtonStyle.success,
-                emoji=EMOJI["order_accept"],
+                emoji=(_emoji('general','order_accept') or None),
                 custom_id=f"order:accept:{order_id}",
             )
         )
@@ -230,7 +231,7 @@ class DoneButton(
             discord.ui.Button(
                 label="Done",
                 style=discord.ButtonStyle.primary,
-                emoji=EMOJI["order_done"],
+                emoji=(_emoji('general','order_done') or None),
                 custom_id=f"order:done:{order_id}",
             )
         )
@@ -253,7 +254,7 @@ class OrderCancelButton(
             discord.ui.Button(
                 label="Cancel",
                 style=discord.ButtonStyle.danger,
-                emoji=EMOJI["order_cancel"],
+                emoji=(_emoji('general','order_cancel') or None),
                 custom_id=f"order:cancel:{order_id}",
             )
         )
@@ -273,7 +274,7 @@ def build_order_panel_view(order: dict, guild: discord.Guild) -> discord.ui.Layo
     status = order["status"]
 
     header = discord.ui.TextDisplay(
-        f"{EMOJI['place_order']} **Order** — {STATUS_TEXT.get(status, status)}\n"
+        f"{_emoji('general','place_order')} **Order** — {STATUS_TEXT.get(status, status)}\n"
         f"Customer: {member.mention if member else 'Unknown'}\n"
         f"Ticket: {channel.mention if channel else '#unknown'} ({order['kind'].title()})"
     )
@@ -370,7 +371,7 @@ async def send_order_panel(
 
     await interaction.edit_original_response(
         view=result_view(
-            f"{EMOJI['order_accept']} Order sent to {orders_channel.mention}.",
+            f"{_emoji('general','order_accept')} Order sent to {orders_channel.mention}.",
             discord.Colour.green(),
         )
     )
@@ -410,9 +411,9 @@ async def send_order_dm(
 
 
 TICKET_STATUS_STYLE = {
-    "accepted": (f"{EMOJI['order_pending']} **Your order has been accepted and is pending.**", discord.Colour.blue()),
-    "completed": (f"{EMOJI['order_done']} **Your order has been completed.**", discord.Colour.green()),
-    "cancelled": (f"{EMOJI['order_cancel']} **Your order has been cancelled.**", discord.Colour.red()),
+    "accepted": (f"{_emoji('general','order_pending')} **Your order has been accepted and is pending.**", discord.Colour.blue()),
+    "completed": (f"{_emoji('general','order_done')} **Your order has been completed.**", discord.Colour.green()),
+    "cancelled": (f"{_emoji('general','order_cancel')} **Your order has been cancelled.**", discord.Colour.red()),
 }
 
 
@@ -482,10 +483,10 @@ async def handle_accept(interaction: discord.Interaction, order_id: int) -> None
 
     await send_order_dm(
         guild, order,
-        f"{EMOJI['order_accept']} **Your order has been accepted and is pending.**",
+        f"{_emoji('general','order_accept')} **Your order has been accepted and is pending.**",
         discord.Colour.blue(),
     )
-    await interaction.followup.send(f"{EMOJI['order_accept']} Order accepted.", ephemeral=True)
+    await interaction.followup.send(f"{_emoji('general','order_accept')} Order accepted.", ephemeral=True)
 
 
 async def handle_done(interaction: discord.Interaction, order_id: int) -> None:
@@ -512,10 +513,10 @@ async def handle_done(interaction: discord.Interaction, order_id: int) -> None:
 
     await send_order_dm(
         guild, order,
-        f"{EMOJI['order_done']} **Your order has been completed.**",
+        f"{_emoji('general','order_done')} **Your order has been completed.**",
         discord.Colour.green(),
     )
-    await interaction.followup.send(f"{EMOJI['order_done']} Order marked as completed.", ephemeral=True)
+    await interaction.followup.send(f"{_emoji('general','order_done')} Order marked as completed.", ephemeral=True)
 
 
 async def handle_cancel(interaction: discord.Interaction, order_id: int) -> None:
@@ -542,10 +543,10 @@ async def handle_cancel(interaction: discord.Interaction, order_id: int) -> None
 
     await send_order_dm(
         guild, order,
-        f"{EMOJI['order_cancel']} **Your order has been cancelled.**",
+        f"{_emoji('general','order_cancel')} **Your order has been cancelled.**",
         discord.Colour.red(),
     )
-    await interaction.followup.send(f"{EMOJI['order_cancel']} Order cancelled.", ephemeral=True)
+    await interaction.followup.send(f"{_emoji('general','order_cancel')} Order cancelled.", ephemeral=True)
 
 
 # --------------------------------------------------------------------------
