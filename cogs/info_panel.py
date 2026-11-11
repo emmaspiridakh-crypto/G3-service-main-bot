@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Callable
 
 import discord
+from emojis import emoji as _emoji
 from discord import app_commands, ui
 from discord.ext import commands
 
@@ -77,7 +78,7 @@ def build_panel_view() -> ui.LayoutView:
 
 
 LARGE = discord.SeparatorSpacing.large
-DOT = "<:name:1545576267904974859>"
+DOT = _emoji('ui','bullet')
 
 
 def _intro(text: ui.TextDisplay):
@@ -100,10 +101,10 @@ def _wrap(*children, accent: int) -> ui.LayoutView:
 def build_tos_view() -> ui.LayoutView:
     return _wrap(
         _sep(),
-        ui.TextDisplay("## <:name:1566484047943704656> 〃 __**Terms Of Service (ToS)**__"),
+        ui.TextDisplay(f"## {_emoji('ui','tos')} 〃 __**Terms Of Service (ToS)**__"),
         _sep(),
         _intro(ui.TextDisplay(
-            "<:name:1566128213858459848> __By purchasing, accessing, or using any service provided by "
+            f"{_emoji('ui','arrow')} __By purchasing, accessing, or using any service provided by "
             "G3 Service, you agree to the following Terms of Service.__"
         )),
         _sep(LARGE),
@@ -159,13 +160,13 @@ def build_tos_view() -> ui.LayoutView:
         ),
         _sep(LARGE),
         ui.TextDisplay(
-            "<:name:1566453823189418146> 〃 ***__By purchasing from G3 Service, you acknowledge that you have "
+            f"{_emoji('ui','close_alt')} 〃 ***__By purchasing from G3 Service, you acknowledge that you have "
             "read, understood, and agreed to these Terms of Service.__***"
         ),
         _sep(),
-        ui.TextDisplay(f"> <:name:1566128213858459848> 〃 __Professional{DOT}Reliable{DOT}Secure__"),
+        ui.TextDisplay(f"> {_emoji('ui','arrow')} 〃 __Professional{DOT}Reliable{DOT}Secure__"),
         _sep(),
-        ui.TextDisplay(f"<:name:1545831836339409048> 〃 **G3 Service, All Rights Reserved** {DOT} **Terms of Service**"),
+        ui.TextDisplay(f"{_emoji('ui','footer')} 〃 **G3 Service, All Rights Reserved** {DOT} **Terms of Service**"),
         _sep(),
         accent=0x007BFF,
     )
@@ -174,18 +175,18 @@ def build_tos_view() -> ui.LayoutView:
 def build_privacy_view() -> ui.LayoutView:
     return _wrap(
         _sep(),
-        ui.TextDisplay("## <:name:1566484521073905824> 〃 **__Privacy & Data Protection __**"),
+        ui.TextDisplay(f"## {_emoji('ui','privacy')} 〃 **__Privacy & Data Protection __**"),
         _sep(),
         _intro(ui.TextDisplay(
-            "> <:name:1566128213858459848> **Your privacy matters to us.**\n"
+            f"> {_emoji('ui','arrow')} **Your privacy matters to us.**\n"
             " \n"
-            "> <:name:1566128213858459848>__ At G3 Service, we are committed to keeping your information safe and "
+            f"> {_emoji('ui','arrow')}__ At G3 Service, we are committed to keeping your information safe and "
             "private. We only collect or use information that is necessary to provide our services, process "
             "orders, and provide customer support.__"
         )),
         _sep(LARGE),
         ui.TextDisplay(
-            "<:name:1566484521073905824> 〃 **What We Protect**\n\n"
+            f"{_emoji('ui','privacy')} 〃 **What We Protect**\n\n"
             f"{DOT} Personal information\n"
             f"{DOT} Order and payment-related information\n"
             f"{DOT} Discord information required for support\n"
@@ -193,29 +194,29 @@ def build_privacy_view() -> ui.LayoutView:
         ),
         _sep(LARGE),
         ui.TextDisplay(
-            "<:name:1566450266469961778> 〃 **What We Don’t Do**\n\n"
+            f"{_emoji('ui','deny')} 〃 **What We Don’t Do**\n\n"
             f"{DOT} We do not sell your personal information.\n"
             f"{DOT} We do not share your information with unauthorized people.\n"
             f"{DOT} We do not use your information for purposes unrelated to our services."
         ),
         _sep(LARGE),
         ui.TextDisplay(
-            " <:name:1545553071872933898> 〃 **__*Support Tickets*__**\n\n\n"
+            f" {_emoji('ui','ticket')} 〃 **__*Support Tickets*__**\n\n\n"
             f"> {DOT} Please avoid sharing passwords, Discord tokens, payment-card numbers, or other highly sensitive information in tickets."
         ),
         _sep(LARGE),
         ui.TextDisplay(
-            "<:name:1548349993830850713> 〃 **__*Orders*__**\n\n\n"
+            f"{_emoji('ui','purchase')} 〃 **__*Orders*__**\n\n\n"
             f"> {DOT} Information provided during an order is used only for fulfilling and managing that order and providing necessary support."
         ),
         _sep(LARGE),
         ui.TextDisplay(
-            "<:name:1566484521073905824> 〃 **__*Your Privacy = Our Responsibility*__**\n\n\n"
+            f"{_emoji('ui','privacy')} 〃 **__*Your Privacy = Our Responsibility*__**\n\n\n"
             f"> {DOT} ***By using our services, you agree to our Privacy Policy and understand that certain information may need to be processed to provide our services.***\n\n"
             f"{DOT} **If you have any questions regarding privacy or your data, please contact our Support Team.**\n"
         ),
         _sep(),
-        ui.TextDisplay(f"<:name:1545831836339409048> 〃 **G3 Service, All Rights Reserved {DOT} Privacy & Data Protection**"),
+        ui.TextDisplay(f"{_emoji('ui','footer')} 〃 **G3 Service, All Rights Reserved {DOT} Privacy & Data Protection**"),
         _sep(),
         accent=0x006EFF,
     )
@@ -230,7 +231,7 @@ def build_faq_view() -> ui.LayoutView:
         ]
     children += [
         ui.TextDisplay(f"**__Professional__{DOT} __Reliable__{DOT} __Secure__**"),
-        ui.TextDisplay(f"<:name:1545831836339409048> 〃** G3 Service, All Rights Reserved {DOT} Informations**"),
+        ui.TextDisplay(f"{_emoji('ui','footer')} 〃** G3 Service, All Rights Reserved {DOT} Informations**"),
         _sep(),
     ]
     return _wrap(*children, accent=0x006EFF)
