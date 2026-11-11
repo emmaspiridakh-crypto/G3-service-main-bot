@@ -159,7 +159,13 @@ def safe_name(name: str) -> str:
 async def get_log_channel(guild: discord.Guild, kind: str | None = None) -> discord.TextChannel | None:
     channel_id = config.SUPPORT_LOG_CHANNEL if kind in SUPPORT_KINDS else config.CHANNEL_LOG
     channel = guild.get_channel(channel_id)
-    return channel if isinstance(channel, discord.TextChannel) else None
+    if not isinstance(channel, discord.TextChannel):
+        logging.getLogger(__name__).warning(
+            "Ticket log channel not found (id=%s). Set %s in config.py to a channel the bot can see.",
+            channel_id, "SUPPORT_LOG_CHANNEL" if kind in SUPPORT_KINDS else "CHANNEL_LOG",
+        )
+        return None
+    return channel
 
 
 def ticket_overwrites(
