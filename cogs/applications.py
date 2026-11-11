@@ -4,6 +4,7 @@ import io
 import re
 
 import discord
+from emojis import emoji as _emoji
 from discord import ui, app_commands
 from discord.ext import commands
 
@@ -105,7 +106,7 @@ def build_staff_panel_view() -> ui.LayoutView:
     banner_url = getattr(config, "STAFF_APPLICATIONS_BANNER_URL", None)
 
     intro = ui.TextDisplay(
-        "> <:name:1545576267904974859> *If you want to become a member of our team as a staff or manager, "
+        f"> {_emoji('ui','bullet')} *If you want to become a member of our team as a staff or manager, "
         "click on the appropriate button that interests you and answer the questions. When you complete "
         "them, we will review it and inform you of the results.* "
     )
@@ -114,13 +115,13 @@ def build_staff_panel_view() -> ui.LayoutView:
     if banner_url:
         children += [ui.MediaGallery(discord.MediaGalleryItem(banner_url)), sep()]
     children += [
-        ui.TextDisplay("# <:name:1563918477746503830> 〃 **__G3 Service™ - Applications__**"),
+        ui.TextDisplay(f"# {_emoji('ui','applications')} 〃 **__G3 Service™ - Applications__**"),
         sep(),
         ui.Section(intro, accessory=ui.Thumbnail(logo_url)) if logo_url else intro,
         sep(discord.SeparatorSpacing.large),
         ui.TextDisplay(
-            "### <:name:1557694211602513950> 〃 ***__Manager Application__*** \n"
-            "> <:Dot:1545576267904974859> If you believe you can handle a position of high responsibility "
+            f"### {_emoji('ui','manager')} 〃 ***__Manager Application__*** \n"
+            f"> {_emoji('ui','bullet')} If you believe you can handle a position of high responsibility "
             "and team management, apply for the manager position."
         ),
         sep(),
@@ -128,14 +129,14 @@ def build_staff_panel_view() -> ui.LayoutView:
             ui.Button(
                 style=discord.ButtonStyle.secondary,
                 label="〃 Management ",
-                emoji=discord.PartialEmoji(name="name", id=1557694211602513950),
+                emoji=(_emoji('ui','manager') or None),
                 custom_id="app_apply:manager",
             ),
         ),
         sep(),
         ui.TextDisplay(
-            "### <:name:1545577020669427752> 〃 ***__Staff Application__*** \n"
-            "> <:Dot:1545576267904974859> If you believe you can be active, assist with supports and tickets, "
+            f"### {_emoji('ui','staff')} 〃 ***__Staff Application__*** \n"
+            f"> {_emoji('ui','bullet')} If you believe you can be active, assist with supports and tickets, "
             "and help keep the server organized, apply for a staff position."
         ),
         sep(),
@@ -143,14 +144,14 @@ def build_staff_panel_view() -> ui.LayoutView:
             ui.Button(
                 style=discord.ButtonStyle.secondary,
                 label="〃 Staff",
-                emoji=discord.PartialEmoji(name="name", id=1545577020669427752),
+                emoji=(_emoji('ui','staff') or None),
                 custom_id="app_apply:staff",
             ),
         ),
         sep(),
         ui.TextDisplay(
-            "<:name:1545831836339409048> 〃 **G3 Service™, All Rights Reserved ©** "
-            "<:name:1545576267904974859> **Application System** "
+            f"{_emoji('ui','footer')} 〃 **G3 Service™, All Rights Reserved ©** "
+            f"{_emoji('ui','bullet')} **Application System** "
         ),
         sep(),
     ]
