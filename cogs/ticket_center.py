@@ -9,6 +9,7 @@ All image/link URLs come from config.py (TICKET_CENTER_*).
 from __future__ import annotations
 
 import discord
+from emojis import emoji as _emoji
 from discord import app_commands, ui
 from discord.ext import commands
 
@@ -16,10 +17,6 @@ import config
 from cogs.support_tickets import ProblemModal
 
 SMALL = discord.SeparatorSpacing.small
-
-
-def _pe(emoji_id: int) -> discord.PartialEmoji:
-    return discord.PartialEmoji(name="name", id=emoji_id)
 
 
 async def _reset_panel(interaction: discord.Interaction) -> None:
@@ -45,11 +42,11 @@ class TicketCenterView(ui.LayoutView):
             placeholder="@📞 〃 Support Center ",
             options=[
                 discord.SelectOption(label="〃 Owner ", value="owner",
-                                     description="Talk with the administrator ", emoji=_pe(1545576744956727306)),
+                                     description="Talk with the administrator ", emoji=(_emoji('ui','owner') or None)),
                 discord.SelectOption(label="〃 Management ", value="manager",
-                                     description="Talk with the management team", emoji=_pe(1557694211602513950)),
+                                     description="Talk with the management team", emoji=(_emoji('ui','manager') or None)),
                 discord.SelectOption(label="〃 General Support ", value="general",
-                                     description="Talk with the staff team", emoji=_pe(1545577020669427752)),
+                                     description="Talk with the staff team", emoji=(_emoji('ui','staff') or None)),
             ],
         )
         support_select.callback = self.on_support
@@ -59,9 +56,9 @@ class TicketCenterView(ui.LayoutView):
             placeholder="@💰 〃 Purchase Center ",
             options=[
                 discord.SelectOption(label="〃 Order ", value="order",
-                                     description="Order a custom product ", emoji=_pe(1545578583332757665)),
+                                     description="Order a custom product ", emoji=(_emoji('ui','order') or None)),
                 discord.SelectOption(label="〃 Purchase ", value="purchase",
-                                     description="Purchase an existing product", emoji=_pe(1545553195760099358)),
+                                     description="Purchase an existing product", emoji=(_emoji('ui','payment') or None)),
             ],
         )
         purchase_select.callback = self.on_purchase
@@ -71,11 +68,11 @@ class TicketCenterView(ui.LayoutView):
             placeholder="@⚙️ 〃 Issues/Replacement ",
             options=[
                 discord.SelectOption(label="〃 Technical Issue ", value="technical",
-                                     description="Problem with the product", emoji=_pe(1545577232922312734)),
+                                     description="Problem with the product", emoji=(_emoji('ui','modify') or None)),
                 discord.SelectOption(label="〃 Payment Issue ", value="billing",
-                                     description="Problem with the payment ", emoji=_pe(1545553195760099358)),
+                                     description="Problem with the payment ", emoji=(_emoji('ui','payment') or None)),
                 discord.SelectOption(label="〃 Replacement ", value="replacement",
-                                     description="Replace a product ", emoji=_pe(1548741673109037116)),
+                                     description="Replace a product ", emoji=(_emoji('ui','replace') or None)),
             ],
         )
         issues_select.callback = self.on_issues
@@ -85,13 +82,13 @@ class TicketCenterView(ui.LayoutView):
             children += [ui.MediaGallery(discord.MediaGalleryItem(config.TICKET_CENTER_BANNER_URL)), sep()]
 
         children += [
-            ui.TextDisplay("# <:name:1565041266079698955> 〃 __***G3 Service™ - Ticket Center***__"),
+            ui.TextDisplay(f"# {_emoji('ui','ticket_center')} 〃 __***G3 Service™ - Ticket Center***__"),
             sep(),
         ]
         welcome = ui.TextDisplay(
             "***__Welcome to our Ticket Center.__***\n"
             "\n"
-            "> <a:name:1545552914334875800> Before you do anything we suggest to learn about our Terms of Service and our Privacy."
+            f"> {_emoji('ui','note')} Before you do anything we suggest to learn about our Terms of Service and our Privacy."
         )
         if config.TICKET_CENTER_THUMBNAIL_URL:
             children.append(ui.Section(welcome, accessory=ui.Thumbnail(config.TICKET_CENTER_THUMBNAIL_URL)))
@@ -104,48 +101,48 @@ class TicketCenterView(ui.LayoutView):
                     ui.Button(
                         style=discord.ButtonStyle.link,
                         label="〃 Informations",
-                        emoji=_pe(1566461391878095091),
+                        emoji=(_emoji('ui','info') or None),
                         url=config.TICKET_CENTER_INFO_URL,
                     ),
                 ),
                 sep(),
             ]
         children += [
-            ui.TextDisplay("## <:name:1548745357717012501> 〃 __***Support Center***__ "),
+            ui.TextDisplay(f"## {_emoji('ui','support')} 〃 __***Support Center***__ "),
             ui.TextDisplay(
                 "*If you need any help or have any questions, choose the appropriate category*. \n"
-                "> <:name:1545576267904974859> **Owner** — Talk directly with the administrator \n"
-                "> <:name:1545576267904974859> **Management** — Talk with the management team\n"
-                "> <:name:1545576267904974859> **General Support** — Talk with the staff team\n"
+                f"> {_emoji('ui','bullet')} **Owner** — Talk directly with the administrator \n"
+                f"> {_emoji('ui','bullet')} **Management** — Talk with the management team\n"
+                f"> {_emoji('ui','bullet')} **General Support** — Talk with the staff team\n"
             ),
             sep(),
             ui.ActionRow(support_select),
             sep(),
-            ui.TextDisplay("## <:name:1548349993830850713> 〃 __***Purchase Center***__"),
+            ui.TextDisplay(f"## {_emoji('ui','purchase')} 〃 __***Purchase Center***__"),
             ui.TextDisplay(
                 "*To purchase a custom product or to order an existing product.*\n"
-                "> <:name:1545576267904974859> **Order** — To order a custom product suited to your needs\n"
-                "> <:name:1545576267904974859> **Purchase** — To buy an existing product"
+                f"> {_emoji('ui','bullet')} **Order** — To order a custom product suited to your needs\n"
+                f"> {_emoji('ui','bullet')} **Purchase** — To buy an existing product"
             ),
             sep(),
             ui.ActionRow(purchase_select),
             sep(),
-            ui.TextDisplay("## <:name:1545577232922312734> 〃 ***__Issues/Replacement__*** "),
+            ui.TextDisplay(f"## {_emoji('ui','modify')} 〃 ***__Issues/Replacement__*** "),
             ui.TextDisplay(
                 "*If you want a product replacement, something goes wrong with the product or the payment. * \n"
-                "> <:name:1545576267904974859> **Technical Issue** — Problem with the product\n"
-                "> <:name:1545576267904974859> **Payment Issue** — Problem with the payment or questions \n"
-                "> <:name:1545576267904974859> **Replacement** — Replace a product "
+                f"> {_emoji('ui','bullet')} **Technical Issue** — Problem with the product\n"
+                f"> {_emoji('ui','bullet')} **Payment Issue** — Problem with the payment or questions \n"
+                f"> {_emoji('ui','bullet')} **Replacement** — Replace a product "
             ),
             sep(),
             ui.ActionRow(issues_select),
             sep(),
-            ui.TextDisplay("### <:name:1545578059820826745> 〃 __**TICKET PROCESS**__   "),
+            ui.TextDisplay(f"### {_emoji('ui','process')} 〃 __**TICKET PROCESS**__   "),
             ui.TextDisplay(
-                "> <a:name:1545552914334875800> Choose the category that best matches your request.\n"
-                "> <a:name:1545552914334875800> Please provide a proper description of your issue or request.\n"
-                "> <a:name:1545552914334875800> Our Team will review your ticket and assist you as soon as possible.\n"
-                "> <a:name:1545552914334875800> Please don't open an owner ticket without an important reason. This action may result in a warning "
+                f"> {_emoji('ui','note')} Choose the category that best matches your request.\n"
+                f"> {_emoji('ui','note')} Please provide a proper description of your issue or request.\n"
+                f"> {_emoji('ui','note')} Our Team will review your ticket and assist you as soon as possible.\n"
+                f"> {_emoji('ui','note')} Please don't open an owner ticket without an important reason. This action may result in a warning "
             ),
             sep(),
         ]
@@ -153,8 +150,8 @@ class TicketCenterView(ui.LayoutView):
             children += [ui.MediaGallery(discord.MediaGalleryItem(config.TICKET_CENTER_FOOTER_GIF_URL)), sep()]
         children += [
             ui.TextDisplay(
-                " <:name:1545831836339409048> 〃 **G3 Service™, All Rights Reserved ©** "
-                "<:name:1545576267904974859> **Ticket  Center** "
+                f" {_emoji('ui','footer')} 〃 **G3 Service™, All Rights Reserved ©** "
+                f"{_emoji('ui','bullet')} **Ticket  Center** "
             ),
             sep(),
         ]
