@@ -98,7 +98,7 @@ TICKET_KIND_STAFF_ROLES: dict[str, list[int]] = {
 }
 
 # All the other tickets (owner, manager, general, technical, billing, replacement) are logged here.
-SUPPORT_LOG_CHANNEL: int = 1569813329159921787
+SUPPORT_LOG_CHANNEL: int = 1565870152694767829
 
 # --- Giveaways / Reviews banners ---
 GIVEAWAY_BANNER_URL: str | None = "https://i.imgur.com/j4myBBI.jpeg"
