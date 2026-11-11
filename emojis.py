@@ -1,3 +1,22 @@
+import re as _re
+
+try:  # Safety net: never send an invalid emoji (ID 0 / no ID / empty name) to Discord
+    import discord as _discord
+
+    _orig_from_str = _discord.PartialEmoji.from_str
+
+    def _safe_from_str(value):
+        text = str(value or "").strip()
+        if not text:
+            return None
+        if text.startswith("<") and not _re.fullmatch(r"<a?:\w{2,32}:\d{17,20}>", text):
+            return None
+        return _orig_from_str(value)
+
+    _discord.PartialEmoji.from_str = staticmethod(_safe_from_str)
+except Exception:  # discord not importable (e.g. tooling) - helpers below still work
+    pass
+
 GENERAL = {
     "purchase": "<:purchase:1569814910798405793>",
     "order": "<:order:1569814993845747823>",
@@ -70,12 +89,12 @@ APPLICATIONS = {
 }
 
 INFO = {
-    "title": "<:title:>",
-    "note": "<a:note:>",
-    "tos": "<:tos:>",
-    "privacy": "<:privacy:>",
-    "footer": "<:footer:>",
-    "footer_right": "<:footer_right:>",
+    "title": "<:title:1569873588624949411>",
+    "note": "<:note:1569877424936853504>",
+    "tos": "<:tos:1569877639689404436>",
+    "privacy": "<:privacy:1569877776410877983>",
+    "footer": "<:footer:1569220750802681886>",
+    "footer_right": "<:footer_right:1569814929274310717>",
 }
 
 INVITES = {
@@ -106,7 +125,7 @@ UI = {
     "server": "<a:server:1569814863465947281>",
     "yes": "<:yes:1569814809451434096>",
     "no": "<:no:1569814804267405392>",
-    "note": "<:note:1569877424936853504>",
+    "note": "<:note:1569884511334961232>",
     "star": "<:star:1569873160239587378>",
     "close": "<:close:1569870156379717702>",
     "ping": "<:ping:1569871118905376848>",
@@ -149,9 +168,9 @@ EMOJI: dict = GENERAL
 
 
 def emoji(category: str, key: str) -> str:
-    """Return the emoji markup, or "" while its ID is still 0 (not filled in yet)
-    so the bot shows no broken ':name:' text and buttons don't error."""
+    """Return the emoji markup, or "" while it isn't filled in properly
+    (ID 0, missing ID, typo...) so the bot never sends an invalid emoji."""
     value = _CATEGORIES.get(category, {}).get(key, "")
-    if not value or value.rstrip(">").endswith(":0"):
+    if not _re.fullmatch(r"<a?:\w{2,32}:\d{17,20}>", value or ""):
         return ""
     return value
