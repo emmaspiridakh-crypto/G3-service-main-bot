@@ -5,6 +5,7 @@ import datetime as _dt
 import logging
 
 import discord
+from emojis import emoji as _emoji
 from discord import app_commands, ui
 from discord.ext import commands
 
@@ -197,8 +198,8 @@ def _build_review_view(record: dict, total_reviews: int, average_rating: float) 
         children += [ui.MediaGallery(discord.MediaGalleryItem(media=banner)), sep()]
     children += [
         ui.TextDisplay(
-            f"> <:name:1566133385254928504> 〃 __**Submitted From:**__ <@{record['author_id']}>\n"
-            f"> <:name:1566447157165166714> 〃 **__Rating:__** {_stars(rating)} ({rating}/5)"
+            f"> {_emoji('ui','user')} 〃 __**Submitted From:**__ <@{record['author_id']}>\n"
+            f"> {_emoji('ui','star')} 〃 **__Rating:__** {_stars(rating)} ({rating}/5)"
         ),
         sep(discord.SeparatorSpacing.large),
         ui.TextDisplay(record["comment"]),
@@ -207,39 +208,39 @@ def _build_review_view(record: dict, total_reviews: int, average_rating: float) 
             ui.Button(
                 style=discord.ButtonStyle.secondary,
                 label=f"〃 Total Reviews: {total_reviews}",
-                emoji=discord.PartialEmoji(name="name", id=1545579981030162432),
+                emoji=(_emoji('ui','server') or None),
                 custom_id="review:log_total_reviews",
                 disabled=True,
             ),
             ui.Button(
                 style=discord.ButtonStyle.secondary,
                 label=f"〃 Total Rating: {average_rating:.1f}/5",
-                emoji=discord.PartialEmoji(name="name", id=1566447157165166714),
+                emoji=(_emoji('ui','star') or None),
                 custom_id="review:log_total_rating",
                 disabled=True,
             ),
         ),
         sep(),
-        ui.TextDisplay("### <:name:1566128213858459848>***__Feedback__*** "),
+        ui.TextDisplay(f"### {_emoji('ui','arrow')}***__Feedback__*** "),
         ui.TextDisplay("> Did you find this review useful? "),
         ui.ActionRow(
             ui.Button(
                 style=discord.ButtonStyle.secondary,
                 label=f"〃 Yes: {yes}",
-                emoji=discord.PartialEmoji(name="name", id=1544994894370578474),
+                emoji=(_emoji('ui','yes') or None),
                 custom_id="review:vote_yes",
             ),
             ui.Button(
                 style=discord.ButtonStyle.secondary,
                 label=f"〃 No: {no}",
-                emoji=discord.PartialEmoji(name="name", id=1544994871369273424),
+                emoji=(_emoji('ui','no') or None),
                 custom_id="review:vote_no",
             ),
         ),
         sep(),
         ui.TextDisplay(
-            "> -# <:name:1545831836339409048> 〃 **G3 Service, All Rights Reserved** "
-            "<:name:1545576267904974859> **Review System **"
+            f"> -# {_emoji('ui','footer')} 〃 **G3 Service, All Rights Reserved** "
+            f"{_emoji('ui','bullet')} **Review System **"
         ),
         sep(),
     ]
@@ -330,10 +331,10 @@ class ReviewPanelView(ui.LayoutView):
             children.append(ui.MediaGallery(discord.MediaGalleryItem(media=config.REVIEWS_BANNER_URL)))
             children.append(sep())
         children += [
-            ui.TextDisplay("## <:name:1566447157165166714> 〃 __**G3 Service - Reviews**__"),
+            ui.TextDisplay(f"## {_emoji('ui','star')} 〃 __**G3 Service - Reviews**__"),
             sep(),
             ui.TextDisplay(
-                "> - <a:name:1545552914334875800> Leave a review to tell us about your "
+                f"> - {_emoji('ui','note')} Leave a review to tell us about your "
                 "experience with us and what we can improve."
             ),
             sep(),
@@ -341,28 +342,28 @@ class ReviewPanelView(ui.LayoutView):
                 ui.Button(
                     style=discord.ButtonStyle.secondary,
                     label="〃 Review Us",
-                    emoji=discord.PartialEmoji(name="name", id=1566447157165166714),
+                    emoji=(_emoji('ui','star') or None),
                     custom_id="review:open",
                 ),
                 ui.Button(
                     style=discord.ButtonStyle.secondary,
                     label=f"〃 Total Reviews: {total_reviews}",
-                    emoji=discord.PartialEmoji(name="name", id=1545579981030162432),
+                    emoji=(_emoji('ui','server') or None),
                     custom_id="review:total_reviews",
                     disabled=True,
                 ),
                 ui.Button(
                     style=discord.ButtonStyle.secondary,
                     label=f"〃 Total Rating: {average_rating:.1f}/5",
-                    emoji=discord.PartialEmoji(name="name", id=1545578059820826745),
+                    emoji=(_emoji('ui','process') or None),
                     custom_id="review:total_rating",
                     disabled=True,
                 ),
             ),
             sep(),
             ui.TextDisplay(
-                "> -#  <:name:1545831836339409048> 〃 **G3 Service, All Rights Reserved "
-                "<:name:1545576267904974859> Review System**"
+                f"> -#  {_emoji('ui','footer')} 〃 **G3 Service, All Rights Reserved "
+                f"{_emoji('ui','bullet')} Review System**"
             ),
             sep(),
         ]
