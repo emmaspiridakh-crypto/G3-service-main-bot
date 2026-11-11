@@ -7,11 +7,11 @@ import logging
 import datetime as dt
 
 import discord
+from emojis import emoji as _emoji
 from discord import app_commands
 from discord.ext import commands
 
 import config
-from emojis import EMOJI
 from utils.storage import store, TRANSCRIPTS_DIR
 from utils.transcripts import build_transcript
 
@@ -73,7 +73,7 @@ def build_ticket_opened_view(channel: discord.TextChannel, kind: str) -> discord
     view.add_item(
         discord.ui.Container(
             discord.ui.Separator(visible=True, spacing=small),
-            discord.ui.TextDisplay("# <:name:1545553071872933898> 〃__***Your Ticket Has Opened.***__ "),
+            discord.ui.TextDisplay(f"# {_emoji('ui','ticket')} 〃__***Your Ticket Has Opened.***__ "),
             discord.ui.Separator(visible=True, spacing=small),
             discord.ui.TextDisplay(" You can go to your ticket by clicking the button below "),
             discord.ui.Separator(visible=True, spacing=small),
@@ -81,17 +81,17 @@ def build_ticket_opened_view(channel: discord.TextChannel, kind: str) -> discord
                 discord.ui.Button(
                     style=discord.ButtonStyle.link,
                     label="〃 My ticket 〃",
-                    emoji=discord.PartialEmoji(name="name", id=1545553071872933898),
+                    emoji=(_emoji('ui','ticket') or None),
                     url=channel.jump_url,
                 ),
             ),
             discord.ui.Separator(visible=True, spacing=small),
             discord.ui.TextDisplay(
-                "> -  <:name:1566128213858459848> Please be respectful and don't spam in your ticket. We will be with you shortly."
+                f"> -  {_emoji('ui','arrow')} Please be respectful and don't spam in your ticket. We will be with you shortly."
             ),
             discord.ui.Separator(visible=True, spacing=small),
             discord.ui.TextDisplay(
-                "> <:name:1545831836339409048> 〃 **G3 Service™, All Rights Reserved ©** <:name:1545576267904974859> **Ticket  Center** "
+                f"> {_emoji('ui','footer')} 〃 **G3 Service™, All Rights Reserved ©** {_emoji('ui','bullet')} **Ticket  Center** "
             ),
             discord.ui.Separator(visible=True, spacing=small),
             accent_colour=0x006FFF,
@@ -254,7 +254,7 @@ class ClaimButton(
             discord.ui.Button(
                 label=label,
                 style=style,
-                emoji=EMOJI["claim"],
+                emoji=(_emoji('general','claim') or None),
                 custom_id=f"ticket:claim:{channel_id}",
                 disabled=bool(claimed_by),
             )
@@ -296,7 +296,7 @@ class ClaimButton(
             lock_failed = True
 
         await interaction.followup.send(
-            f"{EMOJI['claim']} Ticket claimed by {interaction.user.mention}.\n"
+            f"{_emoji('general','claim')} Ticket claimed by {interaction.user.mention}.\n"
         )
         if lock_failed:
             await interaction.followup.send(
@@ -317,7 +317,7 @@ class PingButton(
             discord.ui.Button(
                 label="Ping User",
                 style=discord.ButtonStyle.secondary,
-                emoji=EMOJI["ping"],
+                emoji=(_emoji('general','ping') or None),
                 custom_id=f"ticket:ping:{channel_id}",
             )
         )
@@ -349,10 +349,10 @@ class PingButton(
 
         try:
             await customer.send(
-                f"{EMOJI['ping']} You have a notification in your ticket: <#{self.channel_id}>"
+                f"{_emoji('general','ping')} You have a notification in your ticket: <#{self.channel_id}>"
             )
             await interaction.response.send_message(
-                f"{EMOJI['ping']} Pinged {customer.mention} in DM.", ephemeral=True
+                f"{_emoji('general','ping')} Pinged {customer.mention} in DM.", ephemeral=True
             )
         except discord.Forbidden:
             await interaction.response.send_message(
@@ -370,7 +370,7 @@ class CloseButton(
             discord.ui.Button(
                 label="Close",
                 style=discord.ButtonStyle.secondary,
-                emoji=EMOJI["close"],
+                emoji=(_emoji('general','close') or None),
                 custom_id=f"ticket:close:{channel_id}",
             )
         )
@@ -406,7 +406,7 @@ class TranscriptButton(
             discord.ui.Button(
                 label="View Transcript",
                 style=discord.ButtonStyle.secondary,
-                emoji=EMOJI["transcript"],
+                emoji=(_emoji('general','transcript') or None),
                 custom_id=f"ticket:transcript:{channel_id}",
             )
         )
@@ -489,7 +489,7 @@ class ModifyButton(
             discord.ui.Button(
                 label="Modify",
                 style=discord.ButtonStyle.secondary,
-                emoji=EMOJI["modify"],
+                emoji=(_emoji('general','modify') or None),
                 custom_id=f"ticket:modify:{channel_id}",
             )
         )
@@ -545,7 +545,7 @@ class ModifyView(discord.ui.LayoutView):
         self.add_item(
             discord.ui.Container(
                 discord.ui.TextDisplay(
-                    f"{EMOJI['modify']} **Modify ticket access**\n"
+                    f"{_emoji('general','modify')} **Modify ticket access**\n"
                     "Add someone so they can write in this ticket, or remove "
                     "someone you added before."
                 ),
@@ -586,7 +586,7 @@ class AddMemberView(discord.ui.LayoutView):
         self.add_item(
             discord.ui.Container(
                 discord.ui.TextDisplay(
-                    f"{EMOJI['modify']} **Add a member**\n"
+                    f"{_emoji('general','modify')} **Add a member**\n"
                     "Pick who should be able to write in this ticket."
                 ),
                 discord.ui.ActionRow(picker),
@@ -648,11 +648,11 @@ class AddMemberView(discord.ui.LayoutView):
             )
 
         await interaction.edit_original_response(
-            view=notice_view(f"{EMOJI['modify']} Added {member.mention}.", discord.Colour.green())
+            view=notice_view(f"{_emoji('general','modify')} Added {member.mention}.", discord.Colour.green())
         )
         await channel.send(
             view=notice_view(
-                f"{EMOJI['modify']} {interaction.user.mention} added {member.mention} to this ticket.",
+                f"{_emoji('general','modify')} {interaction.user.mention} added {member.mention} to this ticket.",
                 discord.Colour.green(),
             )
         )
@@ -678,7 +678,7 @@ class RemoveMemberView(discord.ui.LayoutView):
             picker.callback = self.on_pick
             children.append(
                 discord.ui.TextDisplay(
-                    f"{EMOJI['modify']} **Remove a member**\n"
+                    f"{_emoji('general','modify')} **Remove a member**\n"
                     "Pick who should no longer be able to write in this ticket."
                 )
             )
@@ -686,7 +686,7 @@ class RemoveMemberView(discord.ui.LayoutView):
         else:
             children.append(
                 discord.ui.TextDisplay(
-                    f"{EMOJI['modify']} **Remove a member**\n"
+                    f"{_emoji('general','modify')} **Remove a member**\n"
                     "Nobody has been added to this ticket yet."
                 )
             )
@@ -726,15 +726,20 @@ class RemoveMemberView(discord.ui.LayoutView):
             )
 
         await interaction.edit_original_response(
-            view=notice_view(f"{EMOJI['modify']} Removed <@{member_id}>.", discord.Colour.red())
+            view=notice_view(f"{_emoji('general','modify')} Removed <@{member_id}>.", discord.Colour.red())
         )
         await channel.send(
             view=notice_view(
-                f"{EMOJI['modify']} {interaction.user.mention} removed <@{member_id}> from this ticket.",
+                f"{_emoji('general','modify')} {interaction.user.mention} removed <@{member_id}> from this ticket.",
                 discord.Colour.red(),
             ),
             allowed_mentions=discord.AllowedMentions.none(),
         )
+
+
+def _purchase_product(fields: dict[str, str]) -> str:
+    # "bot_type" is the old key used by tickets created before the change.
+    return fields.get("product") or fields.get("bot_type") or "-"
 
 
 def format_ticket_details(kind: str, fields: dict[str, str] | None) -> str:
@@ -743,16 +748,18 @@ def format_ticket_details(kind: str, fields: dict[str, str] | None) -> str:
 
     if kind == "purchase":
         return (
-            f"{EMOJI['bot']} **Type of bot:** {fields.get('bot_type', '-')}\n"
-            f"{EMOJI['plan']} **Plan:** {fields.get('plan', '-')}\n"
-            f"{EMOJI['payment']} **Payment Method:** {fields.get('payment_method', '-')}"
+            f"{_emoji('general','bot')} **Product:** {_purchase_product(fields)}\n"
+            f"{_emoji('general','budget')} **Budget:** {fields.get('budget') or '-'}\n"
+            f"{_emoji('general','server')} **Server:** {fields.get('server') or '-'}\n"
+            f"{_emoji('general','payment')} **Payment Method:** {fields.get('payment_method') or '-'}\n\n"
+            f"**Description:**\n{fields.get('description') or '-'}"
         )
 
     if kind == "order":
         return (
-            f"{EMOJI['server']} **Server:** {fields.get('server', '-')}\n"
-            f"{EMOJI['budget']} **Budget:** {fields.get('budget', '-')}\n"
-            f"{EMOJI['payment']} **Payment Method:** {fields.get('payment_method', '-')}\n\n"
+            f"{_emoji('general','server')} **Server:** {fields.get('server', '-')}\n"
+            f"{_emoji('general','budget')} **Budget:** {fields.get('budget', '-')}\n"
+            f"{_emoji('general','payment')} **Payment Method:** {fields.get('payment_method', '-')}\n\n"
             f"**Description:**\n{fields.get('description', '-')}"
         )
 
@@ -762,8 +769,8 @@ def format_ticket_details(kind: str, fields: dict[str, str] | None) -> str:
     return "Please describe what you need below — a member of staff will be with you shortly."
 
 
-ARROW = "<:arrow4:1566128213858459848>"
-BULLET = "<:name:1566128213858459848>"
+ARROW = _emoji('ui','arrow')
+BULLET = _emoji('ui','arrow')
 
 # "Type" shown in the new panel for the support-style tickets.
 TICKET_TYPE_LABELS = {
@@ -801,41 +808,41 @@ def _build_new_ticket_panel(
     claim = ClaimButton(channel_id, claimed_by)
     claim.item.label = "〃 Claimed" if claimed_by else "〃 Claim"
     claim.item.style = discord.ButtonStyle.secondary
-    claim.item.emoji = discord.PartialEmoji(name="name", id=1566450319351611504)
+    claim.item.emoji = (_emoji('ui','claim') or None)
 
     modify = ModifyButton(channel_id)
     modify.item.label = "〃 Modify "
-    modify.item.emoji = discord.PartialEmoji(name="name", id=1545577232922312734)
+    modify.item.emoji = (_emoji('ui','modify') or None)
 
     ping = PingButton(channel_id)
     ping.item.label = "〃 Ping User"
-    ping.item.emoji = discord.PartialEmoji(name="name", id=1566453919842836520)
+    ping.item.emoji = (_emoji('ui','ping') or None)
 
     close = CloseButton(channel_id)
     close.item.label = "〃 Close "
     close.item.style = discord.ButtonStyle.secondary
-    close.item.emoji = discord.PartialEmoji(name="name", id=1566453862343385289)
+    close.item.emoji = (_emoji('ui','close') or None)
 
     children: list = [sep()]
     banner = _ticket_banner_url()
     if banner:
         children += [discord.ui.MediaGallery(discord.MediaGalleryItem(banner)), sep()]
     children += [
-        discord.ui.TextDisplay(f"# <:name:1566455107329982464> 〃 __Welcome - {customer.mention}__ "),
+        discord.ui.TextDisplay(f"# {_emoji('ui','welcome')} 〃 __Welcome - {customer.mention}__ "),
         sep(),
         discord.ui.TextDisplay(
-            "<:Dot:1545576267904974859> Describe to us how we can help you and we will be with you shortly. "
+            f"{_emoji('ui','bullet')} Describe to us how we can help you and we will be with you shortly. "
         ),
         sep(),
-        discord.ui.TextDisplay("## <:name:1545553071872933898> 〃 **__Ticket Info__**"),
+        discord.ui.TextDisplay(f"## {_emoji('ui','ticket')} 〃 **__Ticket Info__**"),
         sep(),
         discord.ui.TextDisplay("\n".join(info_lines)),
         sep(),
         discord.ui.ActionRow(claim, modify, ping, close),
         sep(),
         discord.ui.TextDisplay(
-            "<:name:1545831836339409048> 〃 **G3 Service™, All Rights Reserved ©** "
-            "<:name:1545576267904974859> **Ticket  Center** "
+            f"{_emoji('ui','footer')} 〃 **G3 Service™, All Rights Reserved ©** "
+            f"{_emoji('ui','bullet')} **Ticket  Center** "
         ),
         sep(),
     ]
@@ -850,16 +857,20 @@ def build_purchase_ticket_view(
     fields: dict[str, str] | None,
     claimed_by: int | None,
 ) -> discord.ui.LayoutView:
-    """Purchase tickets: Product / Status (plan) / Payment Method."""
+    """Purchase tickets: Product / Budget / Server / Payment Method / Description."""
     fields = fields or {}
+    description = (fields.get("description") or "-").strip() or "-"
+    description = description.replace("\n", "\n> ")
     return _build_new_ticket_panel(
         channel_id, customer, claimed_by,
         [
             f"> {ARROW} **Opened By:** {customer.mention}",
             f"> {ARROW} **Type:** Purchase",
-            f"> {BULLET} **Product:** {fields.get('bot_type') or '-'}",
-            f"> {BULLET} **Status:** {fields.get('plan') or '-'}",
+            f"> {BULLET} **Product:** {_purchase_product(fields)}",
+            f"> {BULLET} **Budget:** {fields.get('budget') or '-'}",
+            f"> {BULLET} **Server:** {fields.get('server') or '-'}",
             f"> {BULLET} **Payment Method:** {fields.get('payment_method') or '-'}",
+            f"> {BULLET} **Description:** {description}",
         ],
     )
 
@@ -996,7 +1007,7 @@ async def create_ticket_channel(
     try:
         category_id = config.TICKET_CATEGORIES.get(kind, config.TICKET_CATEGORY)
         category = guild.get_channel(category_id)
-        channel_name = f"gl-{kind}-{safe_name(customer.display_name)}"[:100]
+        channel_name = f"g3-{kind}-{safe_name(customer.display_name)}"[:100]
 
         channel = await guild.create_text_channel(
             name=channel_name,
@@ -1087,7 +1098,7 @@ async def close_ticket(interaction: discord.Interaction, channel_id: int, reason
     closed_at = dt.datetime.now(dt.timezone.utc)
 
     await interaction.response.send_message(
-        f"{EMOJI['close']} Closing this ticket in 5 seconds..."
+        f"{_emoji('general','close')} Closing this ticket in 5 seconds..."
     )
 
     # Whatever happens below, the channel MUST be deleted at the end —
@@ -1171,7 +1182,7 @@ def build_transcript_view(
     def sep(visible: bool = True) -> discord.ui.Separator:
         return discord.ui.Separator(visible=visible, spacing=small)
 
-    dot = "<:name:1566128213858459848>"
+    dot = _emoji('ui','arrow')
     opened = _opened_ts(ticket)
     closed = int(closed_at.timestamp())
     claimed_by = (ticket or {}).get("claimed_by")
@@ -1180,9 +1191,11 @@ def build_transcript_view(
     lines = [f"> {dot} **Ticket Type:** {channel.name}"]
     if kind == "purchase":
         lines += [
-            f"> {dot} **Product:** {fields.get('bot_type') or '-'}",
+            f"> {dot} **Product:** {_purchase_product(fields)}",
+            f"> {dot} **Budget:** {fields.get('budget') or '-'}",
+            f"> {dot} **Server:** {fields.get('server') or '-'}",
             f"> {dot} **Payment Method:** {fields.get('payment_method') or '-'}",
-            f"> {dot} **Status:** {fields.get('plan') or '-'}",
+            f"> {dot} **Description:** {(fields.get('description') or '-').strip() or '-'}",
         ]
     elif kind == "order":
         lines += [
@@ -1202,7 +1215,7 @@ def build_transcript_view(
 
     button.item.label = "〃 Transcript "
     button.item.style = discord.ButtonStyle.secondary
-    button.item.emoji = discord.PartialEmoji(name="name", id=1545576883536793621)
+    button.item.emoji = (_emoji('ui','transcript') or None)
 
     banner = getattr(config, "TRANSCRIPT_BANNER_URL", None) or getattr(config, "INFO_PANEL_BANNER_URL", None)
     logo = getattr(config, "TRANSCRIPT_LOGO_URL", None) or getattr(config, "PURCHASE_PANEL_LOGO_URL", None)
@@ -1214,17 +1227,17 @@ def build_transcript_view(
     if banner:
         children += [discord.ui.MediaGallery(discord.MediaGalleryItem(banner)), sep()]
     children += [
-        discord.ui.TextDisplay("## <:name:1545831836339409048> 〃 **__G3 Service™ - Ticket Transcript__** "),
+        discord.ui.TextDisplay(f"## {_emoji('ui','footer')} 〃 **__G3 Service™ - Ticket Transcript__** "),
         sep(),
         discord.ui.Section(intro, accessory=discord.ui.Thumbnail(logo)) if logo else intro,
         sep(),
         sep(False),
-        discord.ui.TextDisplay("## <:name:1545553071872933898> 〃 ***__Ticket Details__*** "),
+        discord.ui.TextDisplay(f"## {_emoji('ui','ticket')} 〃 ***__Ticket Details__*** "),
         sep(),
         discord.ui.TextDisplay("\n".join(lines)),
         sep(),
         sep(False),
-        discord.ui.TextDisplay("## <:name:1545576883536793621> 〃 ***__Transcript__*** "),
+        discord.ui.TextDisplay(f"## {_emoji('ui','transcript')} 〃 ***__Transcript__*** "),
         sep(),
         discord.ui.TextDisplay(
             f"> {dot} *Below you can see the transcript and download it if you want.* "
@@ -1234,8 +1247,8 @@ def build_transcript_view(
         discord.ui.File(f"attachment://{filename}"),
         sep(),
         discord.ui.TextDisplay(
-            "<:name:1545831836339409048> 〃 **G3 Service™, All Rights Reserved © "
-            "<:Dot:1545576267904974859> Ticket Center **"
+            f"{_emoji('ui','footer')} 〃 **G3 Service™, All Rights Reserved © "
+            f"{_emoji('ui','bullet')} Ticket Center **"
         ),
         sep(),
     ]
@@ -1258,7 +1271,7 @@ async def log_ticket_open(
     view = discord.ui.LayoutView(timeout=None)
 
     header = discord.ui.TextDisplay(
-        f"{EMOJI['log_open']} **Ticket Opened**\n"
+        f"{_emoji('general','log_open')} **Ticket Opened**\n"
         f"**Customer:** {customer.mention} ({customer.id})\n"
         f"**Type:** {kind.title()} — **Channel:** {channel.mention}"
     )
