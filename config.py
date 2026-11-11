@@ -22,6 +22,8 @@ ROLE_MANAGER: int = 1569810451066523778
 CEO_ROLE_ID: int = ROLE_CEO
 OWNERSHIP_ROLE_ID: int = ROLE_OWNERSHIP
 
+# --- LOG CHANNELS ---
+# Purchase + Order tickets (opened / closed / transcript) are logged here.
 CHANNEL_LOG: int = 1569817235164364870
 CHANNEL_ORDERS: int = 1569811833282629795
 CHANNEL_ORDERS_LOG: int = 1569811866363109447
@@ -95,6 +97,7 @@ TICKET_KIND_STAFF_ROLES: dict[str, list[int]] = {
     "replacement": [ROLE_DEVELOPER, ROLE_OWNERSHIP],
 }
 
+# All the other tickets (owner, manager, general, technical, billing, replacement) are logged here.
 SUPPORT_LOG_CHANNEL: int = 1569813329159921787
 
 # --- Giveaways / Reviews banners ---
@@ -188,7 +191,7 @@ APPLICATION_TYPES: dict[str, dict] = {
 # --- Invites panel (/panel-invites). Banner image URL, or None to skip. ---
 INVITES_BANNER_URL: str | None = "https://i.imgur.com/j4myBBI.jpeg"
 
-# Channel where join/leave invite logs are sent. 0 = use CHANNEL_LOG.
+# Channel where join/leave invite logs are sent (its own channel, separate from the ticket logs).
 INVITES_LOG_CHANNEL_ID: int = 1565870155840618797
 BOT_TOKEN: str = _env_or("BOT_TOKEN", "PUT_YOUR_BOT_TOKEN_HERE")
 
