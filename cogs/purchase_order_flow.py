@@ -1,69 +1,63 @@
 from __future__ import annotations
 
 import discord
+from emojis import emoji as _emoji
 
-from emojis import EMOJI
 
-PAYMENT_METHODS = ("PayPal", "Paysafe", "Revolut")
+PAYMENT_METHODS = ("PayPal", "PaySafe", "LTC")
 
 
 # --------------------------------------------------------------------------
-# Purchase flow: What bot? -> Lifetime/Monthly -> PayPal/Paysafe/Revolut -> Check/Cancel
+# Purchase flow: modal (Product / Budget / Server / Description) -> PayPal/Paysafe/LTC -> Send/Cancel
 # --------------------------------------------------------------------------
 
-class WhatBotModal(discord.ui.Modal, title="What bot do you want?"):
-    bot_type = discord.ui.TextInput(
-        label="Which bot are you interested in?",
+class PurchaseModal(discord.ui.Modal, title="Purchase a Product"):
+    product = discord.ui.TextInput(
+        label="Which product are you interested in?",
         placeholder="e.g. Moderation bot, Roleplay bot, Security bot...",
         max_length=200,
     )
-
-    def __init__(self, parent_view: "PurchaseSelectionView"):
-        super().__init__()
-        self.parent_view = parent_view
+    budget = discord.ui.TextInput(
+        label="What's your budget?",
+        placeholder="e.g. 20€",
+        max_length=100,
+    )
+    server = discord.ui.TextInput(
+        label="Server link & name",
+        placeholder="Paste the server invite link and the server name",
+        max_length=200,
+    )
+    description = discord.ui.TextInput(
+        label="Description",
+        style=discord.TextStyle.paragraph,
+        placeholder="Anything specific you'd like us to know...",
+        max_length=1000,
+    )
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        new_view = PurchaseSelectionView(
-            self.bot_type.value, self.parent_view.plan, self.parent_view.payment
+        await interaction.response.send_message(
+            view=PurchasePaymentView(
+                self.product.value, self.budget.value, self.server.value, self.description.value
+            ),
+            ephemeral=True,
         )
-        await interaction.response.edit_message(view=new_view)
 
 
-class PurchaseSelectionView(discord.ui.LayoutView):
+class PurchasePaymentView(discord.ui.LayoutView):
+    """Second step of the purchase flow: pick PayPal / Paysafe / LTC, then Send."""
+
     def __init__(
-        self,
-        bot_type: str | None = None,
-        plan: str | None = None,
-        payment: str | None = None,
+        self, product: str, budget: str, server: str, description: str, payment: str | None = None
     ) -> None:
         super().__init__(timeout=300)
-        self.bot_type = bot_type
-        self.plan = plan
+        self.product = product
+        self.budget = budget
+        self.server = server
+        self.description = description
         self.payment = payment
         self._build()
 
     def _build(self) -> None:
-        what_bot_btn = discord.ui.Button(
-            label="Edit bot" if self.bot_type else "What bot?",
-            style=discord.ButtonStyle.primary,
-            emoji=EMOJI.get("bot", "🤖"),
-        )
-        what_bot_btn.callback = self.on_what_bot
-
-        lifetime_btn = discord.ui.Button(
-            label="Lifetime",
-            style=discord.ButtonStyle.success if self.plan == "Lifetime" else discord.ButtonStyle.secondary,
-            disabled=(self.plan == "Monthly"),
-        )
-        lifetime_btn.callback = self._plan_callback("Lifetime")
-
-        monthly_btn = discord.ui.Button(
-            label="Monthly",
-            style=discord.ButtonStyle.success if self.plan == "Monthly" else discord.ButtonStyle.secondary,
-            disabled=(self.plan == "Lifetime"),
-        )
-        monthly_btn.callback = self._plan_callback("Monthly")
-
         payment_buttons = []
         for method in PAYMENT_METHODS:
             btn = discord.ui.Button(
@@ -74,68 +68,70 @@ class PurchaseSelectionView(discord.ui.LayoutView):
             btn.callback = self._payment_callback(method)
             payment_buttons.append(btn)
 
-        ready = bool(self.bot_type and self.plan and self.payment)
-        check_btn = discord.ui.Button(
-            label="Check", style=discord.ButtonStyle.success, emoji=EMOJI["check"], disabled=not ready
+        send_btn = discord.ui.Button(
+            label="Send", style=discord.ButtonStyle.success,
+            emoji=(_emoji('general', 'send') or None), disabled=not self.payment,
         )
-        check_btn.callback = self.on_check
+        send_btn.callback = self.on_send
 
-        cancel_btn = discord.ui.Button(label="Cancel", style=discord.ButtonStyle.danger, emoji=EMOJI["cancel"])
+        cancel_btn = discord.ui.Button(
+            label="Cancel", style=discord.ButtonStyle.danger, emoji=(_emoji('general', 'cancel') or None)
+        )
         cancel_btn.callback = self.on_cancel
 
         summary = (
-            f"**Bot:** {self.bot_type or '*not set*'}\n"
-            f"**Plan:** {self.plan or '*not set*'}\n"
+            f"**Product:** {self.product}\n"
+            f"**Budget:** {self.budget}\n"
+            f"**Server:** {self.server}\n"
             f"**Payment:** {self.payment or '*not set*'}"
         )
 
         container = discord.ui.Container(
-            discord.ui.TextDisplay(f"{EMOJI['purchase']} **Purchase a Bot**"),
+            discord.ui.TextDisplay(f"{_emoji('general', 'purchase')} **Purchase a Product**"),
             discord.ui.TextDisplay(summary),
+            discord.ui.TextDisplay(f"**Description:**\n{self.description}"),
             discord.ui.Separator(),
-            discord.ui.ActionRow(what_bot_btn),
-            discord.ui.ActionRow(lifetime_btn, monthly_btn),
             discord.ui.ActionRow(*payment_buttons),
-            discord.ui.ActionRow(check_btn, cancel_btn),
+            discord.ui.ActionRow(send_btn, cancel_btn),
             accent_colour=discord.Colour.green(),
         )
         self.add_item(container)
-
-    def _plan_callback(self, plan: str):
-        async def callback(interaction: discord.Interaction) -> None:
-            new_plan = None if self.plan == plan else plan
-            await interaction.response.edit_message(
-                view=PurchaseSelectionView(self.bot_type, new_plan, self.payment)
-            )
-        return callback
 
     def _payment_callback(self, payment: str):
         async def callback(interaction: discord.Interaction) -> None:
             new_payment = None if self.payment == payment else payment
             await interaction.response.edit_message(
-                view=PurchaseSelectionView(self.bot_type, self.plan, new_payment)
+                view=PurchasePaymentView(
+                    self.product, self.budget, self.server, self.description, new_payment
+                )
             )
         return callback
 
-    async def on_what_bot(self, interaction: discord.Interaction) -> None:
-        await interaction.response.send_modal(WhatBotModal(self))
-
-    async def on_check(self, interaction: discord.Interaction) -> None:
+    async def on_send(self, interaction: discord.Interaction) -> None:
         from cogs.tickets import create_ticket_channel
 
-        fields = {"bot_type": self.bot_type, "plan": self.plan, "payment_method": self.payment}
+        fields = {
+            "product": self.product,
+            "budget": self.budget,
+            "server": self.server,
+            "description": self.description,
+            "payment_method": self.payment,
+        }
         await create_ticket_channel(interaction, kind="purchase", fields=fields)
 
     async def on_cancel(self, interaction: discord.Interaction) -> None:
         cancelled_view = discord.ui.LayoutView(timeout=None)
         cancelled_view.add_item(
-            discord.ui.Container(discord.ui.TextDisplay(f"{EMOJI['cancel']} Cancelled."), accent_colour=discord.Colour.red())
+            discord.ui.Container(
+                discord.ui.TextDisplay(f"{_emoji('general', 'cancel')} Cancelled."),
+                accent_colour=discord.Colour.red(),
+            )
         )
         await interaction.response.edit_message(view=cancelled_view)
 
 
 # --------------------------------------------------------------------------
-# Order flow: modal (server/description/budget) -> PayPal/Paysafe/Revolut -> Send/Cancel
+# Order flow: modal (server/description/budget) -> PayPal/Paysafe/LTC -> Send/Cancel
 # --------------------------------------------------------------------------
 
 class OrderInfoModal(discord.ui.Modal, title="Order a Custom Bot"):
@@ -187,11 +183,11 @@ class OrderPaymentView(discord.ui.LayoutView):
 
         ready = bool(self.payment)
         send_btn = discord.ui.Button(
-            label="Send", style=discord.ButtonStyle.success, emoji=EMOJI["send"], disabled=not ready
+            label="Send", style=discord.ButtonStyle.success, emoji=(_emoji('general','send') or None), disabled=not ready
         )
         send_btn.callback = self.on_send
 
-        cancel_btn = discord.ui.Button(label="Cancel", style=discord.ButtonStyle.danger, emoji=EMOJI["cancel"])
+        cancel_btn = discord.ui.Button(label="Cancel", style=discord.ButtonStyle.danger, emoji=(_emoji('general','cancel') or None))
         cancel_btn.callback = self.on_cancel
 
         summary = (
@@ -201,7 +197,7 @@ class OrderPaymentView(discord.ui.LayoutView):
         )
 
         container = discord.ui.Container(
-            discord.ui.TextDisplay(f"{EMOJI['order']} **Order a Custom Bot**"),
+            discord.ui.TextDisplay(f"{_emoji('general','order')} **Order a Custom Bot**"),
             discord.ui.TextDisplay(summary),
             discord.ui.TextDisplay(f"**Description:**\n{self.description}"),
             discord.ui.Separator(),
@@ -233,7 +229,7 @@ class OrderPaymentView(discord.ui.LayoutView):
     async def on_cancel(self, interaction: discord.Interaction) -> None:
         cancelled_view = discord.ui.LayoutView(timeout=None)
         cancelled_view.add_item(
-            discord.ui.Container(discord.ui.TextDisplay(f"{EMOJI['cancel']} Cancelled."), accent_colour=discord.Colour.red())
+            discord.ui.Container(discord.ui.TextDisplay(f"{_emoji('general','cancel')} Cancelled."), accent_colour=discord.Colour.red())
         )
         await interaction.response.edit_message(view=cancelled_view)
 
@@ -243,7 +239,7 @@ class OrderPaymentView(discord.ui.LayoutView):
 # --------------------------------------------------------------------------
 
 async def start_purchase_flow(interaction: discord.Interaction) -> None:
-    await interaction.response.send_message(view=PurchaseSelectionView(), ephemeral=True)
+    await interaction.response.send_modal(PurchaseModal())
 
 
 async def start_order_flow(interaction: discord.Interaction) -> None:
